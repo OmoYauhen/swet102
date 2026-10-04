@@ -979,3 +979,6 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | M3: store record v1 (48 B, §8.1) with clamped decode; settings saved 3 s after the last change, unlock/lock/power-off save at once (an urgent save is never pushed out by the debounce); power-off waits ≤ 500 ms for FDS |
 | 2026-10-05 | M3: PINs from `SWET_PIN_CITY`/`SWET_PIN_SPORT` via swet-heart build.rs; dev PINs 1111/2222 add `-dev`; `make dfu` refuses dev PINs unless `DEV_PINS=1` |
 | 2026-10-05 | M3: FDS file 0x5E70 key 0x0001, CRC on; GC only on no-space; SDK objects depend on sdk_config.h |
+| 2026-10-05 | M4: trips integrate over elapsed time (rides.rs); max needs two readings within 5 km/h; avg over moving time; mAh from current × dt; battery trip after 3 identical SoC readings, first reading initialises silently (`soc_min_valid`, record byte 5) |
+| 2026-10-05 | M4: distances saved every 1 km and after 5 s stopped with ≥ 100 m unsaved; battery-trip reset, trip reset and DFU save at once |
+| 2026-10-05 | M4: menu (Reset trip, Bluetooth, Diagnostics, Firmware, Update) replaces M-hold diagnostics; Firmware screen shows `VERSION_NUM` (Makefile → `SWET_BUILD_NUM`) and the git commit |

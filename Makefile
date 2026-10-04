@@ -104,7 +104,7 @@ SDK_OBJ      := $(SDK_SRC:%.c=$(BUILD)/sdk/%.o) $(SDK_ASM:%.S=$(BUILD)/sdk/%.o)
 all: $(OUT).hex
 
 $(RUST_LIB): FORCE
-	cargo build -p swet-fw --release --target thumbv6m-none-eabi
+	SWET_BUILD_NUM=$(VERSION_NUM) cargo build -p swet-fw --release --target thumbv6m-none-eabi
 
 $(BUILD)/platform/%.o: platform/%.c
 	@mkdir -p $(dir $@)

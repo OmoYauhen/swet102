@@ -8,6 +8,7 @@ pub mod gfx;
 pub mod hal;
 pub mod input;
 pub mod motor;
+pub mod rides;
 pub mod store;
 pub mod ui;
 
@@ -16,8 +17,10 @@ pub use hal::{BleChannel, BleState, Buttons, Diag, Hal, STORE_LEN};
 
 use input::{Btn, Event, Gesture, Input};
 use motor::{Motor, codec};
+use rides::{Rides, Sample};
 use store::{Record, Saver};
 use ui::diag::DiagData;
+use ui::menu::{BleInfo, Confirm, Item, Menu};
 use ui::pin::PinEntry;
 use ui::popup::{Fault, Popup, Popups};
 use ui::ride::{Page, RideScreen, View};
@@ -56,6 +59,10 @@ pub enum Power {
     Off {
         since: u32,
     },
+    /// Dark screen; reboots into the bootloader's DFU mode once saved.
+    Dfu {
+        since: u32,
+    },
 }
 
 pub struct App<H: Hal> {
@@ -66,6 +73,11 @@ pub struct App<H: Hal> {
     stack: Stack,
     ride: RideScreen,
     pin: PinEntry,
+    menu: Menu,
+    rides: Rides,
+    /// Motor reading counters already handed to `rides`.
+    seen_speed: u32,
+    seen_soc: u32,
     state: State,
     /// Last loaded/saved record; trip fields ride along unchanged until M4.
     rec: Record,
@@ -94,6 +106,10 @@ impl<H: Hal> App<H> {
             stack: Stack::new(Screen::Ride),
             ride: RideScreen::new(),
             pin: PinEntry::new(),
+            menu: Menu::new(),
+            rides: Rides::new(),
+            seen_speed: 0,
+            seen_soc: 0,
             state: State {
                 pas: 0,
                 walk: false,
@@ -106,6 +122,7 @@ impl<H: Hal> App<H> {
                 speed_limit: 0,
                 locked: false,
                 soc_min: 0,
+                soc_min_valid: false,
                 odo_m: 0,
                 trip_m: 0,
                 trip_moving_s: 0,
@@ -139,6 +156,7 @@ impl<H: Hal> App<H> {
         self.state.pas = self.rec.pas;
         self.state.speed_limit = self.rec.speed_limit;
         self.state.locked = self.rec.locked;
+        self.rides.load(&self.rec);
         self.saved = self.settings();
         if self.state.locked {
             self.stack.reset(Screen::Pin);
@@ -173,6 +191,7 @@ impl<H: Hal> App<H> {
         self.motor.set_lights(self.state.lights);
         self.motor.set_speed_limit_kmh(self.state.speed_limit);
         self.motor.step(&mut self.hal, now);
+        self.ride_step(now);
         let fault = self.fault(now);
         self.popups.update(fault, now);
 
@@ -193,12 +212,14 @@ impl<H: Hal> App<H> {
         let overlay = match self.power {
             Power::On => Overlay::None,
             Power::Locking { .. } => Overlay::Padlock,
-            Power::Off { .. } => Overlay::Dark,
+            Power::Off { .. } | Power::Dfu { .. } => Overlay::Dark,
         };
         let scene = Scene {
             top: self.stack.top(),
             ride: &self.ride,
             pin: &self.pin,
+            menu: &self.menu,
+            ble: self.ble_info(),
             model: &model,
             diag: &diag,
             popup: self.popups.shown(),
@@ -218,11 +239,50 @@ impl<H: Hal> App<H> {
     }
 
     fn record(&self) -> Record {
-        Record {
+        let mut r = Record {
             pas: self.state.pas,
             speed_limit: self.state.speed_limit,
             locked: self.state.locked,
             ..self.rec
+        };
+        self.rides.store(&mut r);
+        r
+    }
+
+    /// Feed the trips with this tick's motor data (TECH_DESIGN §7.4).
+    fn ride_step(&mut self, now: u32) {
+        let m = &self.motor;
+        let new_speed = (m.speed_samples != self.seen_speed)
+            .then(|| m.values.rpm.map(codec::rpm_to_kph_x10))
+            .flatten();
+        let new_soc = (m.soc_samples != self.seen_soc)
+            .then_some(m.values.soc)
+            .flatten();
+        self.seen_speed = m.speed_samples;
+        self.seen_soc = m.soc_samples;
+        let out = self.rides.step(&Sample {
+            now,
+            rpm: m.values.rpm.unwrap_or(0),
+            current_x2: m.values.current_x2.unwrap_or(0),
+            new_speed,
+            new_soc,
+        });
+        if let Some(km_x10) = out.battery_trip_done {
+            self.popups.battery_trip(km_x10);
+            self.saver.now(now);
+            self.rides.saved();
+        } else if out.save {
+            self.saver.changed(now);
+            self.rides.saved();
+        }
+    }
+
+    fn ble_info(&self) -> BleInfo {
+        let s = self.hal.ble_state().0;
+        BleInfo {
+            connected: s & BleState::CONNECTED != 0,
+            commands: s & BleState::COMMAND_SUB != 0,
+            address: self.hal.ble_address(),
         }
     }
 
@@ -253,6 +313,13 @@ impl<H: Hal> App<H> {
                     || now.wrapping_sub(since) >= config::SAVE_BEFORE_OFF_MS
                 {
                     self.hal.power_off();
+                }
+            }
+            Power::Dfu { since } => {
+                if self.saver.idle(&self.hal)
+                    || now.wrapping_sub(since) >= config::SAVE_BEFORE_OFF_MS
+                {
+                    self.hal.reboot_to_dfu();
                 }
             }
         }
@@ -291,24 +358,68 @@ impl<H: Hal> App<H> {
             self.power_off(now);
             return;
         }
-        if self.popups.shown() != Popup::None {
+        match self.popups.shown() {
+            Popup::None => {}
             // the error screen takes all input; M acknowledges it
-            if (ev.btn, ev.g) == (Btn::M, Click) {
-                self.popups.dismiss(now);
+            Popup::Fault(_) => {
+                if (ev.btn, ev.g) == (Btn::M, Click) {
+                    self.popups.dismiss(now);
+                }
+                return;
             }
-            return;
+            // the battery-trip message goes away with any button
+            Popup::BatteryTrip(_) => {
+                if ev.g == Click {
+                    self.popups.dismiss(now);
+                }
+                return;
+            }
         }
         match self.stack.top() {
             Screen::Ride => match (ev.btn, ev.g) {
                 (Btn::M, Click) => self.ride.next_page(),
                 (Btn::M, Double) => self.ride.next_view(),
-                (Btn::M, Hold) => self.stack.push(Screen::Diag), // menu comes in M4
+                (Btn::M, Hold) => {
+                    self.menu.open();
+                    self.stack.push(Screen::Menu);
+                }
                 (Btn::Pwr, Click) => self.ride.goto_pas(),
                 (Btn::Pwr, Double) => self.lock(now),
                 (Btn::Left | Btn::Right, _) => self.page_event(ev),
                 _ => {}
             },
-            Screen::Diag => {
+            Screen::Menu => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => self.menu.prev(),
+                (Btn::Right, Click) => self.menu.next(),
+                (Btn::M, Click) => self.stack.push(match self.menu.item() {
+                    Item::ResetTrip => Screen::Confirm(Confirm::ResetTrip),
+                    Item::Ble => Screen::Ble,
+                    Item::Diagnostics => Screen::Diag,
+                    Item::Firmware => Screen::Firmware,
+                    Item::Dfu => Screen::Confirm(Confirm::Dfu),
+                }),
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            Screen::Confirm(c) => match (ev.btn, ev.g) {
+                (Btn::M, Click) => {
+                    self.stack.pop();
+                    match c {
+                        Confirm::ResetTrip => {
+                            self.rides.reset_trip();
+                            self.saver.now(now);
+                            self.menu.show_done(now);
+                        }
+                        Confirm::Dfu => {
+                            self.saver.now(now);
+                            self.power = Power::Dfu { since: now };
+                        }
+                    }
+                }
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            Screen::Diag | Screen::Ble | Screen::Firmware => {
                 if (ev.btn, ev.g) == (Btn::Pwr, Click) {
                     self.stack.pop();
                 }
@@ -371,6 +482,11 @@ impl<H: Hal> App<H> {
             pas: self.state.pas,
             walk: self.state.walk,
             sport: self.state.is_sport(),
+            trip: self.rides.trip,
+            batt: self.rides.batt,
+            ride: self.rides.ride,
+            odo_m: self.rides.odo_m,
+            odo_max_x10: self.rides.odo_max_x10,
         }
     }
 
@@ -405,6 +521,14 @@ impl<H: Hal> App<H> {
 
     pub fn power(&self) -> Power {
         self.power
+    }
+
+    pub fn rides(&self) -> &Rides {
+        &self.rides
+    }
+
+    pub fn menu_item(&self) -> Item {
+        self.menu.item()
     }
 
     pub fn saves(&self) -> u32 {

@@ -38,6 +38,7 @@
           fileset = lib.fileset.unions [
             ./Cargo.toml ./Cargo.lock ./rust-toolchain.toml ./crates
             ./platform ./prebuilt ./tools ./Makefile ./version.mk
+            ./assets/fonts # the emulator embeds W95FA for its panel text
           ];
         };
 

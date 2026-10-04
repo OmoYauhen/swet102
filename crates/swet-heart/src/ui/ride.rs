@@ -4,6 +4,7 @@ use super::Model;
 use crate::gfx::assets::{SMALL, SPEED, W95};
 use crate::gfx::{Frame, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
+use crate::rides::Trip;
 
 /// Column 1: white rounded tile.
 const TILE: (i32, i32, i32, i32) = (0, 0, 26, 64);
@@ -45,11 +46,22 @@ impl Page {
 pub enum View {
     Speed,
     Power,
+    Trip,
+    BattTrip,
+    Ride,
+    Odo,
 }
 
 impl View {
-    /// Ring order (PRODUCT §3.2). Trip, battery trip, ride and odo come in M4.
-    const RING: [View; 2] = [View::Speed, View::Power];
+    /// Ring order (PRODUCT §3.2).
+    const RING: [View; 6] = [
+        View::Speed,
+        View::Power,
+        View::Trip,
+        View::BattTrip,
+        View::Ride,
+        View::Odo,
+    ];
 
     fn next(self) -> View {
         let i = Self::RING.iter().position(|&v| v == self).unwrap_or(0);
@@ -162,7 +174,76 @@ fn render_pane(f: &mut Frame, view: View, m: &Model) {
             big_value(f, m.power_w.map(u32::from), b"W");
             f.text3x5(PANE_X, 1, b"POWER", 1, Mode::Set);
         }
+        View::Trip => trip_view(f, b"TRIP", &m.trip),
+        View::BattTrip => trip_view(f, b"BAT", &m.batt),
+        View::Ride => trip_view(f, b"RIDE", &m.ride),
+        View::Odo => odo_view(f, m),
     }
+}
+
+/// Distance large with "km", centred in the pane. Below 1000 km with one
+/// decimal, above that in whole km.
+fn distance(f: &mut Frame, m: u32) {
+    let mut d = [0u8; 12];
+    let s = if m < 1_000_000 {
+        num::u32_dec1(m / 100, &mut d)
+    } else {
+        let mut w = [0u8; 10];
+        let s = num::u32_dec(m / 1000, &mut w);
+        d[..s.len()].copy_from_slice(s);
+        &d[..s.len()]
+    };
+    let (vw, uw) = (SPEED.width(s, 1), SMALL.width(b"km", 1));
+    let x = PANE_X + (PANE_W - (vw + 3 + uw)) / 2;
+    let y = 7;
+    f.text(&SPEED, s, x, y, 1, Mode::Set);
+    let base = y + i32::from(SPEED.height);
+    f.text(
+        &SMALL,
+        b"km",
+        x + vw + 3,
+        base - i32::from(SMALL.height),
+        1,
+        Mode::Set,
+    );
+}
+
+fn line(f: &mut Frame, y: i32, parts: &[&[u8]]) {
+    let mut x = PANE_X;
+    for p in parts {
+        x = f.text3x5(x, y, p, 1, Mode::Set);
+    }
+}
+
+/// PRODUCT §3.2: distance, then max and average, then charge used.
+fn trip_view(f: &mut Frame, label: &[u8], t: &Trip) {
+    f.text3x5(PANE_X, 1, label, 1, Mode::Set);
+    distance(f, t.m);
+    let (mut a, mut b) = ([0u8; 12], [0u8; 12]);
+    line(
+        f,
+        45,
+        &[
+            b"MAX ",
+            num::u32_dec1(u32::from(t.max_x10), &mut a),
+            b"  AVG ",
+            num::u32_dec1(u32::from(t.avg_x10()), &mut b),
+        ],
+    );
+    let mut c = [0u8; 13];
+    line(f, 53, &[num::u32_dec2(t.mah / 10, &mut c), b" AH"]);
+}
+
+/// Total distance and the all-time max speed.
+fn odo_view(f: &mut Frame, m: &Model) {
+    f.text3x5(PANE_X, 1, b"ODO", 1, Mode::Set);
+    distance(f, m.odo_m);
+    let mut a = [0u8; 12];
+    line(
+        f,
+        45,
+        &[b"MAX ", num::u32_dec1(u32::from(m.odo_max_x10), &mut a)],
+    );
 }
 
 /// Battery icon (fill = SoC) with the percentage under it.

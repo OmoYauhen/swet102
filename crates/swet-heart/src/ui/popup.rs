@@ -1,13 +1,17 @@
-//! Full-screen error popup (PRODUCT §8, TECH_DESIGN §5.1/§7.3): a big "!" and
-//! the motor's error code as two hex digits, or "--" when the motor link is lost.
-//! M dismisses it; it returns after `FAULT_REPEAT_MS` if the fault is still
-//! there, or at once when the fault changes.
+//! Full-screen popups (TECH_DESIGN §5.1):
+//!
+//! - **Error** (PRODUCT §8): a big "!" and the motor's error code as two hex
+//!   digits, or "--" when the motor link is lost. M dismisses it; it returns
+//!   after `FAULT_REPEAT_MS` if the fault is still there, or at once when the
+//!   fault changes.
+//! - **Battery trip** (PRODUCT §3.2): "Trip on last charge" and its distance,
+//!   after the pack was charged. Any button dismisses it. An error wins.
 //!
 //! Enums carry explicit `repr(u8)` tags with the empty case first, and nothing
 //! here is an `Option` field, so a fresh App stays all zeroes (.bss).
 
 use crate::config;
-use crate::gfx::assets::W95;
+use crate::gfx::assets::{SMALL, SPEED, TEXT, W95};
 use crate::gfx::{Frame, H, Mode, W, num};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,11 +34,15 @@ enum Dismissed {
 pub enum Popup {
     None,
     Fault(Fault),
+    /// Distance of the battery trip that just ended, 100 m units.
+    BatteryTrip(u16),
 }
 
 pub struct Popups {
     shown: Popup,
     dismissed: Dismissed,
+    battery_trip: u16,
+    battery_trip_on: bool,
 }
 
 impl Default for Popups {
@@ -48,6 +56,8 @@ impl Popups {
         Self {
             shown: Popup::None,
             dismissed: Dismissed::No,
+            battery_trip: 0,
+            battery_trip_on: false,
         }
     }
 
@@ -55,16 +65,27 @@ impl Popups {
         self.shown
     }
 
-    /// Recompute from the current fault (if any).
+    /// Show the battery-trip message until a button is pressed.
+    pub fn battery_trip(&mut self, km_x10: u16) {
+        self.battery_trip = km_x10;
+        self.battery_trip_on = true;
+    }
+
+    /// Recompute from the current fault (if any); a fault beats the message.
     pub fn update(&mut self, fault: Option<Fault>, now: u32) {
+        let message = if self.battery_trip_on {
+            Popup::BatteryTrip(self.battery_trip)
+        } else {
+            Popup::None
+        };
         self.shown = match fault {
             None => {
                 self.dismissed = Dismissed::No;
-                Popup::None
+                message
             }
             Some(f) => match self.dismissed {
                 Dismissed::At(d, t) if d == f && now.wrapping_sub(t) < config::FAULT_REPEAT_MS => {
-                    Popup::None
+                    message
                 }
                 _ => {
                     self.dismissed = Dismissed::No;
@@ -74,18 +95,24 @@ impl Popups {
         };
     }
 
-    /// M on the error screen.
+    /// M on the error screen, any button on the battery-trip message.
     pub fn dismiss(&mut self, now: u32) {
-        if let Popup::Fault(f) = self.shown {
-            self.dismissed = Dismissed::At(f, now);
-            self.shown = Popup::None;
+        match self.shown {
+            Popup::Fault(f) => self.dismissed = Dismissed::At(f, now),
+            Popup::BatteryTrip(_) => self.battery_trip_on = false,
+            Popup::None => {}
         }
+        self.shown = Popup::None;
     }
 }
 
 pub fn render(f: &mut Frame, p: Popup) {
-    let Popup::Fault(fault) = p else { return };
     f.clear();
+    let fault = match p {
+        Popup::None => return,
+        Popup::BatteryTrip(km_x10) => return render_battery_trip(f, km_x10),
+        Popup::Fault(fault) => fault,
+    };
     let mut d = [0u8; 8];
     let bang = W95.width(b"!", 0);
     let gap = 20;
@@ -111,6 +138,34 @@ pub fn render(f: &mut Frame, p: Popup) {
             f.fill_rect(cx + dash + 4, my, dash, 4, Mode::Set);
         }
     }
+}
+
+/// "Trip on last charge" with the distance large, in km with one decimal.
+fn render_battery_trip(f: &mut Frame, km_x10: u16) {
+    let title: &[u8] = b"Trip on last charge";
+    f.text(
+        &TEXT,
+        title,
+        (W - TEXT.width(title, 1)) / 2,
+        2,
+        1,
+        Mode::Set,
+    );
+    let mut d = [0u8; 12];
+    let value = num::u32_dec1(u32::from(km_x10), &mut d);
+    let (vw, uw) = (SPEED.width(value, 2), SMALL.width(b"km", 1));
+    let x = (W - (vw + 4 + uw)) / 2;
+    let y = 22;
+    f.text(&SPEED, value, x, y, 2, Mode::Set);
+    let base = y + i32::from(SPEED.height);
+    f.text(
+        &SMALL,
+        b"km",
+        x + vw + 4,
+        base - i32::from(SMALL.height),
+        1,
+        Mode::Set,
+    );
 }
 
 #[cfg(test)]

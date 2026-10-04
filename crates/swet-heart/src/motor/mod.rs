@@ -74,6 +74,10 @@ pub struct Motor {
     last_pas_write: u32,
     pub values: MotorValues,
     pub diag: MotorDiag,
+    /// Counts every decoded SPEED / BATTERY reply, so consumers can act once
+    /// per new reading (max speed, battery-trip SoC filter).
+    pub speed_samples: u32,
+    pub soc_samples: u32,
 }
 
 impl Motor {
@@ -110,6 +114,8 @@ impl Motor {
                 stray_bytes: 0,
                 writes: 0,
             },
+            speed_samples: 0,
+            soc_samples: 0,
         }
     }
 
@@ -255,8 +261,14 @@ impl Motor {
                 }
             }
             Reply::CurrentX2(c) => self.values.current_x2 = Some(c),
-            Reply::Battery(p) => self.values.soc = Some(p),
-            Reply::SpeedRpm(rpm) => self.values.rpm = Some(rpm),
+            Reply::Battery(p) => {
+                self.values.soc = Some(p);
+                self.soc_samples = self.soc_samples.wrapping_add(1);
+            }
+            Reply::SpeedRpm(rpm) => {
+                self.values.rpm = Some(rpm);
+                self.speed_samples = self.speed_samples.wrapping_add(1);
+            }
         }
     }
 }
