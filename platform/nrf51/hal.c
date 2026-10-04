@@ -47,7 +47,21 @@ void hal_init(void)
     APP_ERROR_CHECK(err);
 }
 
-void hal_display_flush(const uint8_t *fb) { lcd_flush(fb); }
+void hal_display_flush(const uint8_t *fb)
+{
+    static uint32_t sum_us, n;
+    uint32_t t0 = platform_ticks();
+    lcd_flush(fb);
+    uint32_t us = platform_us_since(t0);
+    if (us > g_diag.flush_max_us) {
+        g_diag.flush_max_us = us;
+    }
+    sum_us += us;
+    if (++n == 16) {
+        g_diag.flush_avg_us = sum_us / n;
+        sum_us = n = 0;
+    }
+}
 void hal_display_contrast(uint8_t level) { lcd_contrast(level); }
 void hal_display_orient(uint8_t mode) { lcd_orient(mode); }
 
@@ -118,6 +132,8 @@ uint32_t hal_diag(uint8_t id)
     case 4: return g_diag.ram_kb;
     case 5: return g_diag.sd_ram_base;
     case 6: return g_diag.uart_errors;
+    case 7: return g_diag.flush_avg_us;
+    case 8: return g_diag.flush_max_us;
     default: return 0;
     }
 }

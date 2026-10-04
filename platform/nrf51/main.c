@@ -98,12 +98,22 @@ static void gpio_init(void)
     nrf_gpio_pin_clear(PIN_LCD_RES); /* hold the OLED in reset until lcd_init */
 }
 
+uint32_t platform_ticks(void)
+{
+    return app_timer_cnt_get();
+}
+
+uint32_t platform_us_since(uint32_t t0)
+{
+    uint32_t ticks;
+    (void)app_timer_cnt_diff_compute(app_timer_cnt_get(), t0, &ticks);
+    return (uint32_t)(((uint64_t)ticks * 1000000u) >> 15); /* RTC1 @ 32768 Hz */
+}
+
 static void measure(uint32_t t0)
 {
     static uint32_t sum_us, n;
-    uint32_t ticks;
-    (void)app_timer_cnt_diff_compute(app_timer_cnt_get(), t0, &ticks);
-    uint32_t us = (uint32_t)(((uint64_t)ticks * 1000000u) >> 15); /* RTC1 @ 32768 Hz */
+    uint32_t us = platform_us_since(t0);
     if (us > g_diag.tick_max_us) {
         g_diag.tick_max_us = us;
     }
