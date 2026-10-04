@@ -148,7 +148,7 @@ ifndef DEV_PINS
 endif
 
 dfu: check-pins $(OUT).hex
-	$(NRFUTIL) pkg generate --application $< --key-file $(KEYFILE) \
+	$(NRFUTIL) pkg generate --application $(OUT).hex --key-file $(KEYFILE) \
 	  --application-version $(VERSION_NUM) --hw-version 51 --sd-req 0x87 $(OUT)-$(VERSION_NUM).zip
 
 $(BUILD)/settings.hex: $(OUT).hex
