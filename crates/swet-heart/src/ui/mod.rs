@@ -2,6 +2,7 @@
 //! the App routes events to the top one (§5.5).
 
 pub mod diag;
+pub mod popup;
 pub mod ride;
 
 use crate::gfx::Frame;
@@ -59,15 +60,28 @@ pub struct Model {
     pub sport: bool,
 }
 
-pub fn gesture_cfg(top: Screen, ride: &ride::RideScreen) -> GestureCfg {
+pub fn gesture_cfg(top: Screen, ride: &ride::RideScreen, popup: popup::Popup) -> GestureCfg {
+    if popup != popup::Popup::None {
+        return GestureCfg::SIMPLE;
+    }
     match top {
         Screen::Ride => ride.gesture_cfg(),
         Screen::Diag => GestureCfg::SIMPLE,
     }
 }
 
-pub fn render(f: &mut Frame, top: Screen, ride: &ride::RideScreen, m: &Model, d: &diag::DiagData) {
+pub fn render(
+    f: &mut Frame,
+    top: Screen,
+    ride: &ride::RideScreen,
+    m: &Model,
+    d: &diag::DiagData,
+    popup: popup::Popup,
+) {
     f.clear();
+    if popup != popup::Popup::None {
+        return popup::render(f, popup); // full screen, covers everything
+    }
     match top {
         Screen::Ride => ride.render(f, m),
         Screen::Diag => diag::render(f, d),

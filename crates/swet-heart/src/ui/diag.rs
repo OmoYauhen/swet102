@@ -5,7 +5,7 @@
 use crate::config;
 use crate::gfx::{Frame, Mode, num};
 use crate::hal::Buttons;
-use crate::motor::MotorDiag;
+use crate::motor::{MotorDiag, MotorValues};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct DiagData {
@@ -19,6 +19,7 @@ pub struct DiagData {
     pub sd_ram_base: u32,
     pub uart_errors: u32,
     pub motor: MotorDiag,
+    pub values: MotorValues,
 }
 
 fn line(f: &mut Frame, y: i32, parts: &[&[u8]]) {
@@ -101,7 +102,32 @@ pub fn render(f: &mut Frame, d: &DiagData) {
             num::u32_dec(m.stray_bytes, &mut c),
         ],
     );
-    line(f, 40, &[b"UART ERR ", num::u32_dec(d.uart_errors, &mut a)]);
+    let v = &d.values;
+    fn opt(x: Option<u32>, buf: &mut [u8; 10]) -> &[u8] {
+        match x {
+            Some(n) => num::u32_dec(n, buf),
+            None => b"-",
+        }
+    }
+    let mut e = [0u8; 10];
+    line(
+        f,
+        40,
+        &[
+            b"RPM ",
+            opt(v.rpm.map(u32::from), &mut a),
+            b" A ",
+            opt(v.current_x2.map(|c| u32::from(c) / 2), &mut b),
+            b" SOC ",
+            opt(v.soc.map(u32::from), &mut c),
+            b" ST ",
+            match v.status {
+                Some(s) => num::u32_hex(u32::from(s), 2, &mut h),
+                None => b"-",
+            },
+        ],
+    );
+    line(f, 47, &[b"UART ERR ", num::u32_dec(d.uart_errors, &mut e)]);
 
     for (i, (mask, label)) in [
         (Buttons::LEFT, b"L"),
@@ -119,5 +145,5 @@ pub fn render(f: &mut Frame, d: &DiagData) {
         }
         f.text3x5(bx + 4, 50, *label, 1, Mode::Xor);
     }
-    line(f, 52, &[b"M:ORIENT P:BACK"]);
+    line(f, 56, &[b"M:ORIENT P:BACK"]);
 }

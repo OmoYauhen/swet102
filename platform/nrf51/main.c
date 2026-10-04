@@ -29,6 +29,7 @@
 #define SCHED_EVT_SIZE          0   /* SoftDevice events carry no payload; the tick timer bypasses the scheduler */
 #define SCHED_QUEUE_SIZE        16
 #define STACK_PAINT             0xDEADBEEFu
+#define MAX_CATCH_UP            5   /* ticks run back-to-back at most */
 
 struct platform_diag g_diag;
 
@@ -140,11 +141,18 @@ int main(void)
     uint32_t done = 0;
     for (;;) {
         app_sched_execute();
-        while (done != m_ticks_isr) {
-            uint32_t behind = m_ticks_isr - done;
-            if (behind > 1) {
-                g_diag.missed_ticks += behind - 1;
-            }
+        uint32_t target = m_ticks_isr;
+        uint32_t behind = target - done;
+        if (behind > 1) {
+            g_diag.missed_ticks += behind - 1;
+        }
+        /* Never spiral: if ticks run long, drop the oldest instead of chasing
+         * them forever. The core works on timestamps, so skipped ticks only
+         * cost smoothness, not correctness. */
+        if (behind > MAX_CATCH_UP) {
+            done = target - MAX_CATCH_UP;
+        }
+        while (done != target) {
             done++;
             uint32_t t0 = app_timer_cnt_get();
             swet_tick(done * TICK_MS);
@@ -152,8 +160,12 @@ int main(void)
             if (done % 5 == 0) {
                 g_diag.stack_free = stack_free_bytes();
             }
+            /* Each finished tick is progress. Feeding only after catching up
+             * starved the watchdog whenever ticks took ~20 ms (M1 on hardware:
+             * reset → power latch released → display off after 2 s). A core
+             * stuck inside swet_tick() still trips it. */
+            nrf_drv_wdt_channel_feed(m_wdt);
         }
-        nrf_drv_wdt_channel_feed(m_wdt);
         (void)sd_app_evt_wait();
     }
 }

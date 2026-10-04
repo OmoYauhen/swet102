@@ -64,6 +64,14 @@ pub struct Motor {
     pending_pas: bool,
     pending_lights: bool,
     pending_limit: bool,
+    /// Active motor error (STATUS other than normal/braking).
+    error: Option<u8>,
+    /// Consecutive normal STATUS replies; 3 clear an error.
+    normal_streak: u8,
+    /// Re-send walk assist this often while it is active; 0 = only on change.
+    /// Set from config in `App::init` (TECH_DESIGN §7.2, probe page 7).
+    pub walk_keepalive_ms: u32,
+    last_pas_write: u32,
     pub values: MotorValues,
     pub diag: MotorDiag,
 }
@@ -84,6 +92,10 @@ impl Motor {
             pending_pas: false,
             pending_lights: false,
             pending_limit: false,
+            error: None,
+            normal_streak: 0,
+            walk_keepalive_ms: 0,
+            last_pas_write: 0,
             values: MotorValues {
                 rpm: None,
                 current_x2: None,
@@ -103,6 +115,11 @@ impl Motor {
 
     pub fn link_up(&self) -> bool {
         self.up
+    }
+
+    /// Current motor error code, if any (TECH_DESIGN §7.3).
+    pub fn error(&self) -> Option<u8> {
+        self.error
     }
 
     pub fn set_pas_code(&mut self, code: u8) {
@@ -139,6 +156,9 @@ impl Motor {
         {
             self.up = false;
             self.values = MotorValues::default();
+            // status is unknown without a link; start the error logic afresh
+            self.error = None;
+            self.normal_streak = 0;
         }
 
         if now < self.next_slot_at {
@@ -151,6 +171,13 @@ impl Motor {
             self.bus = Bus::Idle;
         }
 
+        if self.walk_keepalive_ms > 0
+            && self.desired.pas_code == codec::PAS_WALK
+            && now.wrapping_sub(self.last_pas_write) >= self.walk_keepalive_ms
+        {
+            self.pending_pas = true;
+        }
+
         // Writes take the slot ahead of the scheduled read, but only once the
         // controller has answered something (SS does the same).
         if self.up {
@@ -160,6 +187,7 @@ impl Motor {
             }
             if self.pending_pas {
                 self.pending_pas = false;
+                self.last_pas_write = now;
                 return self.write(hal, &codec::write_pas(self.desired.pas_code));
             }
             if self.pending_lights {
@@ -214,7 +242,18 @@ impl Motor {
             self.pending_limit = true;
         }
         match r {
-            Reply::Status(s) => self.values.status = Some(s),
+            Reply::Status(s) => {
+                self.values.status = Some(s);
+                if s == codec::STATUS_NORMAL || s == codec::STATUS_BRAKING {
+                    self.normal_streak = self.normal_streak.saturating_add(1);
+                    if self.normal_streak >= 3 {
+                        self.error = None;
+                    }
+                } else {
+                    self.error = Some(s);
+                    self.normal_streak = 0;
+                }
+            }
             Reply::CurrentX2(c) => self.values.current_x2 = Some(c),
             Reply::Battery(p) => self.values.soc = Some(p),
             Reply::SpeedRpm(rpm) => self.values.rpm = Some(rpm),
