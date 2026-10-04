@@ -961,3 +961,5 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-04 | Watchdog on (2 s) from day one; stack budget 4 KB |
 | 2026-10-04 | tick() never blocks: UART is FIFO + ISR, motor is a state machine; distance and moving time integrate over elapsed time, not slots |
 | 2026-10-04 | Event routing: global → snap animations → popup → top of stack → (ride) current page for LEFT/RIGHT; gesture config latched at button-down |
+| 2026-10-04 | M0: Rust staticlib + SDK 12.3 link cleanly (no builtin clashes); first image 11.1 KB flash / 1.8 KB RAM + 4 KB stack |
+| 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |

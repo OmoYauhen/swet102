@@ -1,0 +1,9 @@
+[package]
+name = "swet-heart"
+description = "Swet102 application core: all display logic, no_std, hardware behind the Hal trait"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true

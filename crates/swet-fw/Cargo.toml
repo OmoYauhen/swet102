@@ -1,0 +1,14 @@
+[package]
+name = "swet-fw"
+description = "Swet102 firmware glue: Hal over FFI to the C platform layer, exported entry points"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+test = false
+bench = false
+
+[dependencies]
+swet-heart.workspace = true

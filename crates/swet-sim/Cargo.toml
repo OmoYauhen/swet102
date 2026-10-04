@@ -1,0 +1,13 @@
+[package]
+name = "swet-sim"
+description = "Swet102 simulator: SimHal, virtual clock, fake motor; used by the emulator and tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+swet-heart.workspace = true
+png = "0.18"
+
+[lints]
+workspace = true
