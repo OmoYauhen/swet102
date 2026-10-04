@@ -215,23 +215,39 @@ int main(void) {
 
 ### 4.3 Timing budget (Cortex-M0 @ 16 MHz)
 
-| Work | Cost (estimate) |
-|---|---|
-| Full-frame render | SS: **13.8 ms avg, 18.7 ms max** (probe) — Swet102 to be measured on the M0/M1 diag screen |
-| SPI flush of 1 KB, blocking via `nrf_drv_spi` (SS code) | SS: **8.4 ms avg, 9.2 ms max** (probe) |
-| Everything else | < 1 ms |
-| **SS total per 20 ms tick** | **27 ms max; 79 % of frames over 20 ms; 634 ticks missed in 64 s** |
+Measured with the Swang Stodva HW probe (page 3), SS firmware on the real SW102:
 
-The probe shows SS does **not** hold 50 fps: the flush alone eats 42 % of a tick.
-The 1 KB itself is only ~2 ms at 4 MHz; the rest is per-byte driver overhead on
-the nRF51 SPI (no DMA) plus 64 separate column-address commands. Plan:
+| | Bench, first run (64 s) | **Normal ride (757 s)** |
+|---|---|---|
+| UI work per tick (render + logic), avg / max | 13.8 / 18.7 ms | **2.8 / 17.9 ms** |
+| SPI flush of 1 KB (`nrf_drv_spi`), avg / max | 8.4 / 9.2 ms | **8.3 / 9.4 ms** |
+| Worst tick | 27.0 ms | **26.2 ms** |
+| Ticks over 20 ms | 2556 of 3247 (79 %) | **176 of 37 869 (0.5 %)** |
+| Ticks missed (caught up late) | 634 | **42** |
+
+What it means:
+
+- **The flush is the fixed cost:** ~8.3 ms every frame no matter what is drawn,
+  i.e. 41 % of a 20 ms tick. The 1 KB itself is only ~2 ms at 4 MHz; the rest is
+  per-byte driver overhead on the nRF51 SPI (no DMA) plus 64 separate
+  column-address commands.
+- **Rendering is cheap on average but spiky:** 2.8 ms while riding, up to ~18 ms
+  for a full redraw (the bench run sat on a heavier screen). A spike plus the
+  flush is what pushes a tick past 20 ms.
+- **SS mostly holds 50 fps on the road** (37 869 frames in 757 s), but only
+  because most frames are cheap. Slide animations redraw and flush every frame
+  for 150–200 ms, so with the stock flush there are only ~11 ms left for render.
+
+Plan for Swet102:
 
 1. **Flush only when the frame changed** (core compares with the last sent frame,
-   ~0.1 ms). A still riding screen then costs no SPI time at all.
+   ~0.1 ms). A still riding screen then costs no SPI time at all. *(M2, PR #3.)*
 2. **Register-level SPI** in `lcd.c`: feed `NRF_SPI0->TXD` with its double buffer
-   and poll `EVENTS_READY`, instead of one `nrf_drv_spi_transfer` per row. Target ≤ 3 ms.
+   and poll `EVENTS_READY`, instead of one `nrf_drv_spi_transfer` per row. Target ≤ 3 ms,
+   which leaves ≥ 15 ms per frame for rendering during animations.
 3. Keep the render small: byte-aligned blits for fonts and fills instead of
-   per-pixel loops. Measure on the diag screen before optimising further.
+   per-pixel loops. Budget: worst-case render ≤ 10 ms. Measure on the diag screen
+   (`TICK US avg/max`) before optimising further.
 
 ### 4.4 Nothing in a tick waits
 
@@ -972,6 +988,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-04 | M0: Rust staticlib + SDK 12.3 link cleanly (no builtin clashes); first image 11.1 KB flash / 1.8 KB RAM + 4 KB stack |
 | 2026-10-05 | HW probe: 32 KB RAM; bootloader at 0x3AC00 → app region ends at 0x37C00 (115 KB), FDS 0x37C00–0x3ABFF; SS flush 8.4 ms → flush only on change + register-level SPI planned |
 | 2026-10-05 | PAS digits in the page tile use W95FA (OFL 1.1, `assets/fonts/`), pixel-exact ×4; `swet-assets` renders outline pixel fonts on their native grid |
+| 2026-10-05 | Probe frame timing on a 757 s ride: SS flush 8.3 ms every frame (fixed cost), render 2.8 ms avg / 17.9 ms max, 0.5 % of ticks over 20 ms. Register-level SPI (≤ 3 ms) stays required for 50 fps slides; render budget ≤ 10 ms |
 | 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |
 | 2026-10-04 | Fonts: Swang Stodva XBMs (transposed, 0 = lit) converted by `swet-assets` into upright row-major Rust consts; output committed |
 | 2026-10-04 | The App must be zero-initialised (lands in .bss): defaults are set in `init()`, enums with niches get explicit tags; `make check` enforces it |
