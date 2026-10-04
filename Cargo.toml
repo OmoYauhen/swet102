@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["crates/swet-heart", "crates/swet-fw", "crates/swet-sim", "crates/swet-emu"]
+# swet-fw is a no_std staticlib for thumbv6m; it's built by the Makefile, not by
+# plain `cargo build` / `cargo test` on the host.
+default-members = ["crates/swet-heart", "crates/swet-sim", "crates/swet-emu"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-only"
+repository = "https://github.com/OmoYauhen/swet102"
+
+[workspace.dependencies]
+swet-heart = { path = "crates/swet-heart" }
+swet-sim = { path = "crates/swet-sim" }
+
+[workspace.lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = true      # debug info stays in the ELF, never in the flash image
+
+[profile.dev]
+panic = "abort"
+
+# The emulator is a desktop app; give it normal optimisation.
+[profile.release.package.swet-emu]
+opt-level = 3
