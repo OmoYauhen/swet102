@@ -217,13 +217,21 @@ int main(void) {
 
 | Work | Cost (estimate) |
 |---|---|
-| Full-frame render | 2–4 ms |
-| SPI flush of 1 KB at 4 MHz, blocking (as in SS, `SS:lcd.c:11-14`) | ~2.5 ms |
+| Full-frame render | SS: **13.8 ms avg, 18.7 ms max** (probe) — Swet102 to be measured on the M0/M1 diag screen |
+| SPI flush of 1 KB, blocking via `nrf_drv_spi` (SS code) | SS: **8.4 ms avg, 9.2 ms max** (probe) |
 | Everything else | < 1 ms |
-| **Total per 20 ms tick** | **< 8 ms** |
+| **SS total per 20 ms tick** | **27 ms max; 79 % of frames over 20 ms; 634 ticks missed in 64 s** |
 
-SS already runs a 50 fps full redraw on this chip. Rust at `opt-level = "z"`
-should land in the same range. The M0 trial (§15) measures it.
+The probe shows SS does **not** hold 50 fps: the flush alone eats 42 % of a tick.
+The 1 KB itself is only ~2 ms at 4 MHz; the rest is per-byte driver overhead on
+the nRF51 SPI (no DMA) plus 64 separate column-address commands. Plan:
+
+1. **Flush only when the frame changed** (core compares with the last sent frame,
+   ~0.1 ms). A still riding screen then costs no SPI time at all.
+2. **Register-level SPI** in `lcd.c`: feed `NRF_SPI0->TXD` with its double buffer
+   and poll `EVENTS_READY`, instead of one `nrf_drv_spi_transfer` per row. Target ≤ 3 ms.
+3. Keep the render small: byte-aligned blits for fonts and fills instead of
+   per-pixel loops. Measure on the diag screen before optimising further.
 
 ### 4.4 Nothing in a tick waits
 
@@ -589,7 +597,7 @@ at every power-off. The product doc is updated to match.
 ### 8.2 Platform: FDS (C)
 
 - **Storage engine:** SDK FDS, with 3 virtual pages of 1 KB directly below the
-  bootloader (0x38400–0x3AFFF). One file/key holds one record, with `FDS_CRC_ENABLED`.
+  bootloader (0x37C00–0x3ABFF; the bootloader starts at 0x3AC00). One file/key holds one record, with `FDS_CRC_ENABLED`.
 - **The linker script reserves those pages.** SS's doesn't (`SS:gcc_nrf51.ld:8-12`).
 - **No Peer Manager** (no bonding).
 - **Saves are asynchronous:** `fds_record_update`, with GC only when FDS reports no
@@ -725,11 +733,11 @@ is powered off and started with a long PWR press (soft power latch).
 | Region | Range | Size |
 |---|---|---|
 | MBR + S130 2.0.1 | 0x00000–0x1AFFF | 108 KB |
-| **Swet102 app** (C + Rust) | 0x1B000–0x383FF | **117 KB** (SS uses ~46 KB) |
-| FDS pages (3 × 1 KB) | 0x38400–0x3AFFF | 3 KB, reserved in the linker script |
-| casainho bootloader | 0x3B000–0x3FBFF | 19 KB |
+| **Swet102 app** (C + Rust) | 0x1B000–0x37BFF | **115 KB** (SS uses ~46 KB) |
+| FDS pages (3 × 1 KB) | 0x37C00–0x3ABFF | 3 KB, reserved in the linker script |
+| casainho bootloader | 0x3AC00–0x3FBFF | 20 KB (`UICR.BOOTLOADERADDR` = 0x3AC00, probe) |
 | bootloader settings | 0x3FC00–0x3FFFF | 1 KB |
-| **RAM** (after S130) | 0x20002C00–… | 21 KB if the chip has 32 KB — **see §16** |
+| **RAM** (after S130) | 0x20002C00–0x20007FFF | 21 KB of 32 KB (probe: 4 × 8 KB; S130 needs ≥ 0x20001FE8) |
 
 **RAM budget:**
 - framebuffer 1 KB
@@ -875,7 +883,7 @@ fn m_double_click_switches_pane_without_switching_page() {
 | Core logic | `cargo test -p swet-heart` (unit) + `cargo test -p swet-sim` (scenarios, golden frames) |
 | Lints | `cargo clippy -- -D warnings` with `float_arithmetic` and `unwrap_used` denied in `swet-heart`; `cargo fmt --check` |
 | Firmware build | `nix build .#firmware` with dev PINs |
-| Size gates | app ≤ 117 KB; RAM + stack ≤ budget; **no `core::fmt` symbols** in the map; `cargo bloat` top-20 published in the CI log |
+| Size gates | app ≤ 115 KB; RAM + stack ≤ budget; **no `core::fmt` symbols** in the map; `cargo bloat` top-20 published in the CI log |
 | C side | `-Wall -Wextra -Werror` for `platform/nrf51` |
 | Hardware | manual checklist per release (§16 items, then a smoke ride) |
 
@@ -923,7 +931,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 
 | # | Item | Why it matters | How to check |
 |---|---|---|---|
-| 1 | **RAM size** | Notes from the SWD session say the chip is **QFAA**, which normally means **16 KB RAM**. But SS links for 32 KB and its .bss + stack reach past 16 KB, and it runs. The Rust stack budget (§10.1) depends on the answer. | Read FICR `NUMRAMBLOCK`/`SIZERAMBLOCKS` over SWD |
+| 1 | ~~RAM size~~ | **Resolved by the probe:** 32 KB (4 × 8 KB). The "QFAA = 16 KB" note was wrong. | — |
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
 | 4 | **GPREGRET DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | Write 0xB1 + reset, watch for `SW102_DFU` |
@@ -962,6 +970,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-04 | tick() never blocks: UART is FIFO + ISR, motor is a state machine; distance and moving time integrate over elapsed time, not slots |
 | 2026-10-04 | Event routing: global → snap animations → popup → top of stack → (ride) current page for LEFT/RIGHT; gesture config latched at button-down |
 | 2026-10-04 | M0: Rust staticlib + SDK 12.3 link cleanly (no builtin clashes); first image 11.1 KB flash / 1.8 KB RAM + 4 KB stack |
+| 2026-10-05 | HW probe: 32 KB RAM; bootloader at 0x3AC00 → app region ends at 0x37C00 (115 KB), FDS 0x37C00–0x3ABFF; SS flush 8.4 ms → flush only on change + register-level SPI planned |
 | 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |
 | 2026-10-04 | Fonts: Swang Stodva XBMs (transposed, 0 = lit) converted by `swet-assets` into upright row-major Rust consts; output committed |
 | 2026-10-04 | The App must be zero-initialised (lands in .bss): defaults are set in `init()`, enums with niches get explicit tags; `make check` enforces it |
