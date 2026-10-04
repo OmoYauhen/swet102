@@ -88,10 +88,7 @@ int16_t hal_uart_read(void)
     return app_uart_get(&b) == NRF_SUCCESS ? b : -1;
 }
 
-/* Persistence arrives in M3 (FDS). */
-bool hal_store_load(uint8_t *buf, uint16_t len) { (void)buf; (void)len; return false; }
-void hal_store_save(const uint8_t *buf, uint16_t len) { (void)buf; (void)len; }
-bool hal_store_busy(void) { return false; }
+/* hal_store_* live in store.c (FDS). */
 
 /* GATT arrives in M5. */
 uint8_t hal_ble_state(void) { return 0; }
@@ -134,6 +131,7 @@ uint32_t hal_diag(uint8_t id)
     case 6: return g_diag.uart_errors;
     case 7: return g_diag.flush_avg_us;
     case 8: return g_diag.flush_max_us;
+    case 9: return g_diag.store_errors;
     default: return 0;
     }
 }

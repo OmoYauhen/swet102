@@ -62,6 +62,8 @@ pub enum Diag {
     FlushAvgUs = 7,
     /// Longest display flush since boot, µs.
     FlushMaxUs = 8,
+    /// Flash writes that failed since boot.
+    StoreErrors = 9,
 }
 
 pub trait Hal {

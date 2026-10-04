@@ -70,6 +70,11 @@ static uint32_t stack_free_bytes(void)
 
 static void ble_evt(ble_evt_t *evt) { (void)evt; }
 
+static void sys_evt(uint32_t evt)
+{
+    store_sys_evt(evt); /* fstorage completes flash operations on these */
+}
+
 static void softdevice_init(void)
 {
     nrf_clock_lf_cfg_t lf = NRF_CLOCK_LFCLKSRC;
@@ -85,6 +90,7 @@ static void softdevice_init(void)
     g_diag.sd_ram_base = ram_base;
     APP_ERROR_CHECK(err);
     APP_ERROR_CHECK(softdevice_ble_evt_handler_set(ble_evt));
+    APP_ERROR_CHECK(softdevice_sys_evt_handler_set(sys_evt));
 }
 
 static void gpio_init(void)
@@ -137,6 +143,7 @@ int main(void)
 
     lcd_init();
     hal_init();
+    store_init(); /* before swet_init(): the core loads its record in init() */
 
     swet_init(0);
 

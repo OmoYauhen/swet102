@@ -20,6 +20,8 @@ pub struct DiagData {
     pub uart_errors: u32,
     pub lcd_avg_us: u32,
     pub lcd_max_us: u32,
+    pub saves: u32,
+    pub store_errors: u32,
     pub motor: MotorDiag,
     pub values: MotorValues,
 }
@@ -160,5 +162,15 @@ pub fn render(f: &mut Frame, d: &DiagData) {
         }
         f.text3x5(bx + 4, 50, *label, 1, Mode::Xor);
     }
-    line(f, 56, &[b"M:ORIENT P:BACK"]);
+    let (mut s1, mut s2) = ([0u8; 10], [0u8; 10]);
+    line(
+        f,
+        56,
+        &[
+            b"SAVE ",
+            num::u32_dec(d.saves, &mut s1),
+            b" SERR ",
+            num::u32_dec(d.store_errors, &mut s2),
+        ],
+    );
 }

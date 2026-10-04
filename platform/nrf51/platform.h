@@ -15,6 +15,10 @@ void lcd_orient(uint8_t mode);
 /* hal.c */
 void hal_init(void);
 
+/* store.c */
+void store_init(void);
+void store_sys_evt(uint32_t sys_evt);
+
 /* main.c: measurements reported through hal_diag() */
 struct platform_diag {
     uint32_t tick_avg_us;
@@ -26,6 +30,7 @@ struct platform_diag {
     uint32_t uart_errors;
     uint32_t flush_avg_us;
     uint32_t flush_max_us;
+    uint32_t store_errors;
 };
 extern struct platform_diag g_diag;
 
