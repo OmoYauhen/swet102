@@ -239,6 +239,27 @@ impl Frame {
         let mut cx = x;
         for &c in s {
             let g = font3x5::glyph(c);
+            // Fast path: unscaled and fully on screen. Each glyph row is 3 bits
+            // written with one or two masked byte ops (the diagnostics screen
+            // draws ~700 of these per frame).
+            if scale == 1 && cx >= 0 && cx + 3 <= W && y >= 0 && y + 5 <= H {
+                for row in 0..5 {
+                    let r = (g >> ((4 - row) * 3)) & 7; // bit2 = leftmost
+                    if r == 0 {
+                        continue;
+                    }
+                    let v = ((r & 4) >> 2) | (r & 2) | ((r & 1) << 2); // LSB = leftmost
+                    let m = v << (cx & 7);
+                    let line = &mut self.0[(y + row) as usize];
+                    let i = (cx >> 3) as usize;
+                    apply(&mut line[i], m as u8, mode);
+                    if m > 0xFF {
+                        apply(&mut line[i + 1], (m >> 8) as u8, mode);
+                    }
+                }
+                cx += 4;
+                continue;
+            }
             for row in 0..5 {
                 for col in 0..3 {
                     if g & (1 << ((4 - row) * 3 + (2 - col))) != 0 {
@@ -348,6 +369,32 @@ mod tests {
                     }
                     assert!(fast == slow, "text differs at ({dx},{dy}) {mode:?}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn fast_text3x5_matches_pixel_reference() {
+        let s = b"SWET102 V0.0.1 OR1 TICK US 20558/25512 :%-+=<>!?()";
+        for (x, y) in [(0, 0), (3, 12), (5, 59), (1, 30), (-2, 4), (100, 61)] {
+            for mode in [Mode::Set, Mode::Clear, Mode::Xor] {
+                let mut fast = background();
+                let mut slow = fast.clone();
+                fast.text3x5(x, y, s, 1, mode);
+                // scale 2 never takes the fast path: use it as the reference shape
+                let mut cx = x;
+                for &c in s.iter() {
+                    let g = super::font3x5::glyph(c);
+                    for row in 0..5 {
+                        for col in 0..3 {
+                            if g & (1 << ((4 - row) * 3 + (2 - col))) != 0 {
+                                slow.pixel(cx + col, y + row, mode);
+                            }
+                        }
+                    }
+                    cx += 4;
+                }
+                assert!(fast == slow, "3x5 text differs at ({x},{y}) {mode:?}");
             }
         }
     }

@@ -18,6 +18,8 @@ pub struct DiagData {
     pub ram_kb: u32,
     pub sd_ram_base: u32,
     pub uart_errors: u32,
+    pub lcd_avg_us: u32,
+    pub lcd_max_us: u32,
     pub motor: MotorDiag,
     pub values: MotorValues,
 }
@@ -31,6 +33,7 @@ fn line(f: &mut Frame, y: i32, parts: &[&[u8]]) {
 
 pub fn render(f: &mut Frame, d: &DiagData) {
     let (mut a, mut b, mut c) = ([0u8; 10], [0u8; 10], [0u8; 10]);
+    let mut h2 = [0u8; 10];
     let mut h = [0u8; 8];
     f.rect(0, 0, 128, 64, Mode::Set);
 
@@ -100,6 +103,8 @@ pub fn render(f: &mut Frame, d: &DiagData) {
             num::u32_dec(m.bad_checksums, &mut b),
             b" STRAY ",
             num::u32_dec(m.stray_bytes, &mut c),
+            b" UE ",
+            num::u32_dec(d.uart_errors, &mut h2),
         ],
     );
     let v = &d.values;
@@ -127,7 +132,17 @@ pub fn render(f: &mut Frame, d: &DiagData) {
             },
         ],
     );
-    line(f, 47, &[b"UART ERR ", num::u32_dec(d.uart_errors, &mut e)]);
+    let mut e2 = [0u8; 10];
+    line(
+        f,
+        47,
+        &[
+            b"LCD US ",
+            num::u32_dec(d.lcd_avg_us, &mut e),
+            b"/",
+            num::u32_dec(d.lcd_max_us, &mut e2),
+        ],
+    );
 
     for (i, (mask, label)) in [
         (Buttons::LEFT, b"L"),

@@ -24,5 +24,11 @@ struct platform_diag {
     uint32_t ram_kb;
     uint32_t sd_ram_base;
     uint32_t uart_errors;
+    uint32_t flush_avg_us;
+    uint32_t flush_max_us;
 };
 extern struct platform_diag g_diag;
+
+/* RTC1 timestamps for measurements (32768 Hz). */
+uint32_t platform_ticks(void);
+uint32_t platform_us_since(uint32_t t0);

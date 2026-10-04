@@ -58,6 +58,10 @@ pub enum Diag {
     SdRamBase = 5,
     /// UART line errors since boot.
     UartErrors = 6,
+    /// Average display flush over the last 16 flushes, µs.
+    FlushAvgUs = 7,
+    /// Longest display flush since boot, µs.
+    FlushMaxUs = 8,
 }
 
 pub trait Hal {

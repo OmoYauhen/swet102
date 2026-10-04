@@ -208,6 +208,8 @@ impl<H: Hal> App<H> {
             ram_kb: h.diag(Diag::RamKb),
             sd_ram_base: h.diag(Diag::SdRamBase),
             uart_errors: h.diag(Diag::UartErrors),
+            lcd_avg_us: h.diag(Diag::FlushAvgUs),
+            lcd_max_us: h.diag(Diag::FlushMaxUs),
             motor: self.motor.diag,
             values: self.motor.values,
         }
