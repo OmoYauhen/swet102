@@ -3095,7 +3095,7 @@
  
 
 #ifndef CRC16_ENABLED
-#define CRC16_ENABLED 0
+#define CRC16_ENABLED 1
 #endif
 
 // <q> CRC32_ENABLED  - crc32 - CRC32 calculation routines
@@ -3116,6 +3116,11 @@
 //==========================================================
 #ifndef FDS_ENABLED
 #define FDS_ENABLED 1
+#endif
+
+// Swet102: CRC-check our record on open (needs crc16.c).
+#ifndef FDS_CRC_ENABLED
+#define FDS_CRC_ENABLED 1
 #endif
 #if  FDS_ENABLED
 // <o> FDS_OP_QUEUE_SIZE - Size of the internal queue.

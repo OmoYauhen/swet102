@@ -3,6 +3,10 @@
 //! Display keys: ← → LEFT/RIGHT · ↓ or Space M · P or Esc PWR.
 //! Motor knobs: W/S speed ±1 km/h · E/D current ±1 A · R/F battery ±5 % ·
 //! L link on/off · F12 screenshot (PNG in the working directory).
+//!
+//! Flash is kept in `emu-store.bin` (working directory), so PAS, lock and mode
+//! survive a restart like on the bike. `--fresh` starts with empty flash.
+//! PWR hold powers off: the window closes once the save has landed.
 
 use std::time::{Duration, Instant};
 
@@ -12,6 +16,7 @@ use swet_heart::{Buttons, config};
 use swet_sim::Sim;
 
 const SCALE: usize = 6;
+const STORE_FILE: &str = "emu-store.bin";
 const LIT: u32 = 0x00E8_F4FF; // OLED white with a hint of blue
 const DARK: u32 = 0x0008_0A0C;
 const GAP: u32 = 0x0000_0000;
@@ -27,7 +32,17 @@ fn main() {
     };
     window.set_target_fps(0);
 
-    let mut sim = Sim::new();
+    let store_path = std::path::PathBuf::from(STORE_FILE);
+    let fresh = std::env::args().any(|a| a == "--fresh");
+    let stored = if fresh {
+        None
+    } else {
+        std::fs::read(&store_path)
+            .ok()
+            .and_then(|b| <[u8; swet_heart::STORE_LEN]>::try_from(b.as_slice()).ok())
+    };
+    let mut sim = Sim::with_store(stored);
+    let mut persisted = stored;
     let mut buf = vec![0u32; w * h];
     let start = Instant::now();
     let mut shot = 0u32;
@@ -102,6 +117,14 @@ fn main() {
             sim.app().state().pas,
         );
         window.set_title(&title);
+        if sim.hal().store != persisted {
+            persisted = sim.hal().store;
+            if let Some(bytes) = persisted
+                && let Err(e) = std::fs::write(&store_path, bytes)
+            {
+                eprintln!("swet-emu: cannot write {STORE_FILE}: {e}");
+            }
+        }
         render(&sim.screen(), &mut buf, w);
         if let Err(e) = window.update_with_buffer(&buf, w, h) {
             eprintln!("swet-emu: {e}");

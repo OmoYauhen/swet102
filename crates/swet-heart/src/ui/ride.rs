@@ -181,4 +181,26 @@ fn render_battery(f: &mut Frame, m: &Model) {
     } else {
         f.text3x5(BAT_X + 3, 56, b"--", 1, Mode::Set);
     }
+    if m.sport {
+        bolt(f, x + 2, y + 6);
+    }
+}
+
+/// Sport mode (PRODUCT §3.3): a lightning bolt XOR-ed over the battery body,
+/// black on the filled part and white on the empty part. 6 px wide, every
+/// row drawn twice → 18 px tall.
+fn bolt(f: &mut Frame, x: i32, y: i32) {
+    const ROWS: [&[u8; 6]; 9] = [
+        b"....##", b"...##.", b"..##..", b".##...", b"######", b"...##.", b"..##..", b".##...",
+        b"##....",
+    ];
+    for (r, row) in ROWS.iter().enumerate() {
+        for (c, &px) in row.iter().enumerate() {
+            if px == b'#' {
+                let (px_x, px_y) = (x + c as i32, y + 2 * r as i32);
+                f.pixel(px_x, px_y, Mode::Xor);
+                f.pixel(px_x, px_y + 1, Mode::Xor);
+            }
+        }
+    }
 }
