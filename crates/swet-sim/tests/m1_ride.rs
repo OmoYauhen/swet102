@@ -99,9 +99,18 @@ fn m_double_click_switches_view_not_page() {
     assert_eq!(s.app().view(), View::Power);
     assert_eq!(s.app().page(), Page::Pas);
     s.assert_screen("m1_power");
-    s.double_click(Buttons::M);
-    s.run_ms(400);
-    assert_eq!(s.app().view(), View::Speed);
+    // the rest of the ring (M4): trip, battery trip, ride, odometer, back to speed
+    for v in [
+        View::Trip,
+        View::BattTrip,
+        View::Ride,
+        View::Odo,
+        View::Speed,
+    ] {
+        s.double_click(Buttons::M);
+        s.run_ms(400);
+        assert_eq!(s.app().view(), v);
+    }
 }
 
 #[test]
@@ -149,12 +158,10 @@ fn link_loss_and_recovery_resends_everything() {
 }
 
 #[test]
-fn m_hold_opens_diagnostics_and_pwr_goes_back() {
+fn m_hold_opens_the_menu_and_pwr_goes_back() {
     let mut s = riding(0);
     s.hold(Buttons::M, 1200);
-    assert_eq!(s.app().screen(), Screen::Diag);
-    s.click(Buttons::M);
-    assert_eq!(s.app().screen(), Screen::Diag, "M does nothing here");
+    assert_eq!(s.app().screen(), Screen::Menu);
     s.click(Buttons::PWR);
     assert_eq!(s.app().screen(), Screen::Ride);
 }

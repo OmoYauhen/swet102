@@ -2,6 +2,7 @@
 //! the App routes events to the top one (§5.5).
 
 pub mod diag;
+pub mod menu;
 pub mod pin;
 pub mod popup;
 pub mod ride;
@@ -9,13 +10,20 @@ pub mod ride;
 use crate::gfx::Frame;
 use crate::input::GestureCfg;
 
+// Explicit tag: `Ride` must be 0 so a fresh App is all zeroes (.bss).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
 pub enum Screen {
     Ride,
-    /// Platform + motor diagnostics. Until the menu exists (M4), M hold opens it.
-    Diag,
     /// Locked at power-on: enter a PIN to ride with assist.
     Pin,
+    /// M hold: the menu (PRODUCT §5).
+    Menu,
+    Confirm(menu::Confirm),
+    /// Detail screens opened from the menu.
+    Diag,
+    Ble,
+    Firmware,
 }
 
 const DEPTH: usize = 4;
@@ -67,6 +75,11 @@ pub struct Model {
     pub pas: u8,
     pub walk: bool,
     pub sport: bool,
+    pub trip: crate::rides::Trip,
+    pub batt: crate::rides::Trip,
+    pub ride: crate::rides::Trip,
+    pub odo_m: u32,
+    pub odo_max_x10: u16,
 }
 
 /// Power-off overlay (TECH_DESIGN §8.3): the display goes dark the moment
@@ -84,6 +97,8 @@ pub struct Scene<'a> {
     pub top: Screen,
     pub ride: &'a ride::RideScreen,
     pub pin: &'a pin::PinEntry,
+    pub menu: &'a menu::Menu,
+    pub ble: menu::BleInfo,
     pub model: &'a Model,
     pub diag: &'a diag::DiagData,
     pub popup: popup::Popup,
@@ -97,7 +112,7 @@ pub fn gesture_cfg(top: Screen, ride: &ride::RideScreen, popup: popup::Popup) ->
     }
     match top {
         Screen::Ride => ride.gesture_cfg(),
-        Screen::Diag | Screen::Pin => GestureCfg::SIMPLE,
+        _ => GestureCfg::SIMPLE,
     }
 }
 
@@ -113,7 +128,11 @@ pub fn render(f: &mut Frame, s: &Scene) {
     }
     match s.top {
         Screen::Ride => s.ride.render(f, s.model),
-        Screen::Diag => diag::render(f, s.diag),
         Screen::Pin => s.pin.render(f, s.now),
+        Screen::Menu => s.menu.render(f, s.now),
+        Screen::Confirm(c) => menu::render_confirm(f, c),
+        Screen::Diag => diag::render(f, s.diag),
+        Screen::Ble => menu::render_ble(f, &s.ble),
+        Screen::Firmware => menu::render_firmware(f),
     }
 }

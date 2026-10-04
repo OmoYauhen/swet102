@@ -47,6 +47,33 @@ fn main() {
     let _ = writeln!(out, "pub const DEV_PINS: bool = {dev};");
     let _ = writeln!(out, "/// Version shown on screen and over BLE.");
     let _ = writeln!(out, "pub const VERSION: &str = {version:?};");
+
+    // DFU application version (YYMMDDHH) and the commit, for the Firmware screen.
+    // The Makefile passes SWET_BUILD_NUM; outside it (tests, emulator) "-".
+    println!("cargo:rerun-if-env-changed=SWET_BUILD_NUM");
+    let build_num = std::env::var("SWET_BUILD_NUM").unwrap_or_else(|_| "-".into());
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join(".git/HEAD").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join(".git/refs/heads").display()
+    );
+    let git_hash = std::process::Command::new("git")
+        .args(["rev-parse", "--short=7", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".into());
+    let _ = writeln!(out, "/// DFU application version this image was built as.");
+    let _ = writeln!(out, "pub const BUILD_NUM: &str = {build_num:?};");
+    let _ = writeln!(out, "/// Commit the image was built from.");
+    let _ = writeln!(out, "pub const GIT_HASH: &str = {git_hash:?};");
     let dest = std::path::Path::new(&std::env::var("OUT_DIR").expect("cargo sets this"))
         .join("build_info.rs");
     std::fs::write(dest, out).expect("write build_info.rs");

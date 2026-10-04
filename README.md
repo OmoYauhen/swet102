@@ -6,8 +6,9 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M3 — riding screen, motor bus, error screens, saved settings, lock
-with city/sport PINs, auto power-off. Trips, menu and BLE come in M4–M5.
+**Status:** M4 — riding screen, motor bus, error screens, saved settings, lock
+with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
+message, menu. BLE comes in M5, animations in M6.
 
 ## Layout
 
@@ -47,14 +48,14 @@ make check                 # size gates
 | L | motor link on / off |
 | F12 | PNG screenshot |
 
-## Using it (M3)
+## Using it (M4)
 
 | Gesture | Does |
 |---|---|
 | RIGHT / LEFT | PAS + / − (0–9) |
 | hold LEFT at PAS 0 | walk assist while held (tile shows ↑) |
-| M double-click | speed ↔ power |
-| M hold | diagnostics screen (until the menu exists); PWR goes back |
+| M double-click | next info view: speed → power → TRIP → BAT → RIDE → ODO |
+| M hold | menu (below) |
 | PWR hold | power off (settings are saved first) |
 | PWR double-click | **lock**: padlock, then off. The next power-on asks for a PIN |
 | PIN screen: LEFT / RIGHT, M, PWR | change the digit, next digit, back one digit |
@@ -87,7 +88,24 @@ shows `-dev`; `make dfu` refuses that unless you add `DEV_PINS=1` for a bench bu
 `tools/nrfutil.sh` and `tools/openocd.sh` run nrfutil 6.1.7 and OpenOCD in Docker
 (nrfutil needs Python < 3.11; raw USB needs root on NixOS).
 
-## Diagnostics screen (M hold)
+## Menu (M hold)
+
+LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
+
+| Item | Does |
+|---|---|
+| Reset trip | zeroes the manual trip (asks first) |
+| Bluetooth | phone connected?, commands on?, the display's BLE address |
+| Diagnostics | the screen below |
+| Firmware | version, build number (`VERSION_NUM`), git commit |
+| Update (DFU) | saves, then reboots into the bootloader's DFU mode (asks first) |
+
+**Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
+by 10 % or more (and shows how far the last charge went), RIDE starts at 0 on
+every power-on. Each shows distance, max and average speed (average over moving
+time only) and the charge used in Ah; ODO shows the total and the all-time max.
+
+## Diagnostics screen (menu → Diagnostics)
 
 | Shows | Meaning |
 |---|---|
