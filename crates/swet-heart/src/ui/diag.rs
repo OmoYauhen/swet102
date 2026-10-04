@@ -1,6 +1,6 @@
 //! Diagnostics screen: platform measurements, motor bus counters and the live
 //! button state (the M0 hardware-trial pattern, kept for bench work).
-//! M click cycles the SH1107 orientation, PWR click goes back.
+//! PWR click goes back.
 
 use crate::config;
 use crate::gfx::{Frame, Mode, num};
@@ -9,7 +9,6 @@ use crate::motor::{MotorDiag, MotorValues};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct DiagData {
-    pub orient: u8,
     pub buttons: Buttons,
     pub tick_avg_us: u32,
     pub tick_max_us: u32,
@@ -39,24 +38,7 @@ pub fn render(f: &mut Frame, d: &DiagData) {
     let mut h = [0u8; 8];
     f.rect(0, 0, 128, 64, Mode::Set);
 
-    // Orientation markers: up arrow + TOP at the top-left, pixel at (1,1),
-    // 3×3 block at the bottom-right.
-    f.pixel(1, 1, Mode::Set);
-    f.vline(5, 3, 8, Mode::Set);
-    f.hline(4, 4, 3, Mode::Set);
-    f.hline(3, 5, 5, Mode::Set);
-    f.text3x5(10, 3, b"TOP", 1, Mode::Set);
-    f.fill_rect(124, 60, 3, 3, Mode::Set);
-    let x = f.text3x5(30, 3, b"SWET102 V", 1, Mode::Set);
-    f.text3x5(x, 3, config::VERSION.as_bytes(), 1, Mode::Set);
-    let x = f.text3x5(100, 3, b"OR", 1, Mode::Set);
-    f.text3x5(
-        x + 2,
-        3,
-        num::u32_dec(u32::from(d.orient), &mut a),
-        1,
-        Mode::Set,
-    );
+    line(f, 3, &[b"SWET102 V", config::VERSION.as_bytes()]);
 
     line(
         f,

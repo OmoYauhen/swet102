@@ -22,7 +22,6 @@ pub struct SimHal {
     pub uart_log: Vec<u8>,
     pub flushes: u32,
     pub last_flush: Option<Frame>,
-    pub orient: u8,
     pub contrast: u8,
     /// What is in "flash".
     pub store: Option<[u8; STORE_LEN]>,
@@ -43,9 +42,6 @@ impl Hal for SimHal {
     }
     fn display_contrast(&mut self, level: u8) {
         self.contrast = level;
-    }
-    fn display_orient(&mut self, mode: u8) {
-        self.orient = mode;
     }
     fn buttons(&mut self) -> Buttons {
         Buttons(self.buttons)

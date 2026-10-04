@@ -74,7 +74,6 @@ pub struct App<H: Hal> {
     saved: (u8, u8, bool),
     power: Power,
     last_activity: u32,
-    orient: u8,
     last_buttons: Buttons,
     popups: Popups,
     /// The frame last sent to the display; flush only when it differs
@@ -122,7 +121,6 @@ impl<H: Hal> App<H> {
             saved: (0, 0, false),
             power: Power::On,
             last_activity: 0,
-            orient: 0,
             last_buttons: Buttons(0),
             popups: Popups::new(),
             sent: Frame::new(),
@@ -146,9 +144,7 @@ impl<H: Hal> App<H> {
             self.stack.reset(Screen::Pin);
         }
         self.last_activity = now;
-        self.orient = config::DISPLAY_ORIENT;
         self.motor.walk_keepalive_ms = config::WALK_KEEPALIVE_MS;
-        self.hal.display_orient(self.orient);
     }
 
     /// Called every 20 ms from the main loop only. Never blocks (TECH_DESIGN §4.4).
@@ -312,15 +308,11 @@ impl<H: Hal> App<H> {
                 (Btn::Left | Btn::Right, _) => self.page_event(ev),
                 _ => {}
             },
-            Screen::Diag => match (ev.btn, ev.g) {
-                (Btn::M, Click) => {
-                    self.orient = (self.orient + 1) & 3;
-                    self.hal.display_orient(self.orient);
-                    self.sent_valid = false; // the panel re-reads its RAM in the new order
+            Screen::Diag => {
+                if (ev.btn, ev.g) == (Btn::Pwr, Click) {
+                    self.stack.pop();
                 }
-                (Btn::Pwr, Click) => self.stack.pop(),
-                _ => {}
-            },
+            }
             Screen::Pin => match (ev.btn, ev.g) {
                 (Btn::Left, Click) => self.pin.down(),
                 (Btn::Right, Click) => self.pin.up(),
@@ -385,7 +377,6 @@ impl<H: Hal> App<H> {
     fn diag_data(&self) -> DiagData {
         let h = &self.hal;
         DiagData {
-            orient: self.orient,
             buttons: self.last_buttons,
             tick_avg_us: h.diag(Diag::TickAvgUs),
             tick_max_us: h.diag(Diag::TickMaxUs),

@@ -54,7 +54,7 @@ make check                 # size gates
 | RIGHT / LEFT | PAS + / − (0–9) |
 | hold LEFT at PAS 0 | walk assist while held (tile shows ↑) |
 | M double-click | speed ↔ power |
-| M hold | diagnostics screen (until the menu exists); there, M cycles the display orientation, PWR goes back |
+| M hold | diagnostics screen (until the menu exists); PWR goes back |
 | PWR hold | power off (settings are saved first) |
 | PWR double-click | **lock**: padlock, then off. The next power-on asks for a PIN |
 | PIN screen: LEFT / RIGHT, M, PWR | change the digit, next digit, back one digit |
@@ -91,7 +91,6 @@ shows `-dev`; `make dfu` refuses that unless you add `DEV_PINS=1` for a bench bu
 
 | Shows | Meaning |
 |---|---|
-| ↑ TOP, pixel at top-left, block at bottom-right | which way is up; **M click** cycles the 4 SH1107 orientations (`OR n`) |
 | `TICK US avg/max`, `MISS` | time spent in one `swet_tick()`, late ticks |
 | `STACK FREE` | bytes of the 4 KB stack never touched |
 | `RAM nK`, `SD BASE` | RAM size from FICR, lowest RAM start the SoftDevice accepts |

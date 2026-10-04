@@ -70,8 +70,6 @@ pub trait Hal {
     // display: 64 rows × 16 bytes, see gfx::Frame
     fn display_flush(&mut self, frame: &Frame);
     fn display_contrast(&mut self, level: u8);
-    /// SH1107 orientation: bit0 = segment remap (A0/A1), bit1 = COM scan (C0/C8).
-    fn display_orient(&mut self, mode: u8);
 
     fn buttons(&mut self) -> Buttons;
 

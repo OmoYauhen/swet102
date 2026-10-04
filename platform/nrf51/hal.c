@@ -63,7 +63,6 @@ void hal_display_flush(const uint8_t *fb)
     }
 }
 void hal_display_contrast(uint8_t level) { lcd_contrast(level); }
-void hal_display_orient(uint8_t mode) { lcd_orient(mode); }
 
 uint8_t hal_buttons(void)
 {

@@ -10,7 +10,6 @@
 void lcd_init(void);
 void lcd_flush(const uint8_t *fb);
 void lcd_contrast(uint8_t level);
-void lcd_orient(uint8_t mode);
 
 /* hal.c */
 void hal_init(void);

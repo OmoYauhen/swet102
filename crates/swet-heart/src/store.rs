@@ -182,7 +182,6 @@ mod tests {
     impl Hal for Flash {
         fn display_flush(&mut self, _: &crate::Frame) {}
         fn display_contrast(&mut self, _: u8) {}
-        fn display_orient(&mut self, _: u8) {}
         fn buttons(&mut self) -> crate::Buttons {
             crate::Buttons(0)
         }

@@ -50,8 +50,3 @@ pub const FAULT_REPEAT_MS: u32 = 10_000;
 /// WRITE_SPEED_LIM unit: wheel RPM (true) or Swang Stodva's km/h × 10 (false).
 /// Unverified on stock firmware (TECH_DESIGN §16).
 pub const SPEED_LIMIT_AS_RPM: bool = true;
-
-// --- display ---
-/// SH1107 orientation: bit0 = segment remap (A0/A1), bit1 = COM scan (C0/C8).
-/// `A1 C0` reads upright with the buttons on the left (HW probe, page 9).
-pub const DISPLAY_ORIENT: u8 = 1;

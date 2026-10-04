@@ -25,12 +25,13 @@ static const uint8_t m_init[] = {
     0xAE,       /* display off */
     0xA8, 0x3F, /* multiplex ratio */
     0xD5, 0x50, /* clock divide / oscillator */
-    0xC0,       /* COM scan direction (overridden by lcd_orient) */
+    0xC0,       /* COM scan direction: normal                                */
     0xD3, 0x60, /* display offset */
     0xDC, 0x00, /* display start line */
     0x21,       /* memory addressing mode */
     0x81, 0xFF, /* contrast */
-    0xA0,       /* segment remap (overridden by lcd_orient) */
+    0xA1,       /* segment remap: A1 + C0 reads upright in landscape with the
+                 * buttons on the left (HW probe page 9; SS used A0 portrait) */
     0xA4,       /* display follows RAM */
     0xA6,       /* not inverted */
     0xAD, 0x8A, /* DC-DC */
@@ -108,14 +109,5 @@ void lcd_flush(const uint8_t *fb)
 void lcd_contrast(uint8_t level)
 {
     const uint8_t cmd[2] = {0x81, level};
-    send_cmd(cmd, sizeof cmd);
-}
-
-void lcd_orient(uint8_t mode)
-{
-    const uint8_t cmd[2] = {
-        (uint8_t)(0xA0 | (mode & 1)),          /* segment remap */
-        (uint8_t)((mode & 2) ? 0xC8 : 0xC0),   /* COM scan direction */
-    };
     send_cmd(cmd, sizeof cmd);
 }
