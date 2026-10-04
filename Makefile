@@ -128,6 +128,10 @@ check: $(OUT).elf
 	@if $(NM) -C $< | grep -q 'core::fmt'; then \
 	  echo "error: core::fmt is linked into the firmware:"; $(NM) -C $< | grep 'core::fmt' | head; exit 1; fi
 	@echo "ok: no core::fmt in $<"
+	@# A non-zero default anywhere in App moves 1+ KB from .bss to .data (flash).
+	@if ! $(NM) -C $< | grep -q " b swet_fw::APP$$"; then \
+	  echo "error: swet_fw::APP is not zero-initialised (not in .bss):"; $(NM) -S -C $< | grep "swet_fw::APP"; exit 1; fi
+	@echo "ok: App is zero-initialised (.bss)"
 
 dfu: $(OUT).hex
 	$(NRFUTIL) pkg generate --application $< --key-file $(KEYFILE) \

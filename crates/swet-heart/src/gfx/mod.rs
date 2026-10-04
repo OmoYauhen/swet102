@@ -4,6 +4,8 @@
 //! the SH1107 expects when the 64 controller columns are sent as 64 rows of
 //! 16 bytes, so the platform flushes it without any rotation.
 
+#[rustfmt::skip]
+pub mod assets;
 pub mod font3x5;
 pub mod num;
 
@@ -16,6 +18,42 @@ pub struct Frame(pub [[u8; 16]; 64]);
 impl Default for Frame {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A proportional bitmap font: one strip of glyphs, upright, row-major,
+/// LSB = leftmost, 1 = lit. Glyph `i` spans columns `offsets[i]..offsets[i + 1]`.
+pub struct Font {
+    pub height: u8,
+    pub stride: u16,
+    pub chars: &'static [u8],
+    pub offsets: &'static [u16],
+    pub bits: &'static [u8],
+}
+
+/// A 1-bpp image in the same layout as [`Font`].
+pub struct Image {
+    pub w: u16,
+    pub h: u16,
+    pub stride: u16,
+    pub bits: &'static [u8],
+}
+
+impl Font {
+    fn glyph(&self, c: u8) -> Option<(i32, i32)> {
+        let i = self.chars.iter().position(|&k| k == c)?;
+        let x0 = i32::from(self.offsets[i]);
+        Some((x0, i32::from(self.offsets[i + 1]) - x0))
+    }
+
+    /// Width of `s` in pixels with `gap` px between glyphs.
+    pub fn width(&self, s: &[u8], gap: i32) -> i32 {
+        let w: i32 = s
+            .iter()
+            .filter_map(|&c| self.glyph(c))
+            .map(|(_, w)| w + gap)
+            .sum();
+        (w - gap).max(0)
     }
 }
 
@@ -80,6 +118,86 @@ impl Frame {
         self.hline(x, y + h - 1, w, mode);
         self.vline(x, y + 1, h - 2, mode);
         self.vline(x + w - 1, y + 1, h - 2, mode);
+    }
+
+    /// Copy a `w`×`h` block starting at column `sx` of a packed bitmap to (`dx`, `dy`).
+    #[allow(clippy::too_many_arguments)]
+    fn blit_bits(
+        &mut self,
+        bits: &[u8],
+        stride: u16,
+        sx: i32,
+        w: i32,
+        h: i32,
+        dx: i32,
+        dy: i32,
+        mode: Mode,
+    ) {
+        let stride = usize::from(stride);
+        for y in 0..h {
+            let row = &bits[y as usize * stride..];
+            for x in 0..w {
+                let s = (sx + x) as usize;
+                if row[s >> 3] & (1 << (s & 7)) != 0 {
+                    self.pixel(dx + x, dy + y, mode);
+                }
+            }
+        }
+    }
+
+    pub fn image(&mut self, img: &Image, x: i32, y: i32, mode: Mode) {
+        self.blit_bits(
+            img.bits,
+            img.stride,
+            0,
+            i32::from(img.w),
+            i32::from(img.h),
+            x,
+            y,
+            mode,
+        );
+    }
+
+    /// Draw `s` with its top-left at (`x`, `y`). Unknown characters are skipped.
+    /// Returns the x after the last glyph.
+    pub fn text(&mut self, font: &Font, s: &[u8], x: i32, y: i32, gap: i32, mode: Mode) -> i32 {
+        let mut cx = x;
+        for &c in s {
+            if let Some((sx, w)) = font.glyph(c) {
+                self.blit_bits(
+                    font.bits,
+                    font.stride,
+                    sx,
+                    w,
+                    i32::from(font.height),
+                    cx,
+                    y,
+                    mode,
+                );
+                cx += w + gap;
+            }
+        }
+        cx
+    }
+
+    /// Rounded-rectangle fill with corner radius `r` (r ≤ 4 looks right at this size).
+    pub fn round_rect(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, mode: Mode) {
+        for yy in 0..h {
+            let dy = if yy < r {
+                r - yy
+            } else if yy >= h - r {
+                yy - (h - r - 1)
+            } else {
+                0
+            };
+            // widest k with k² + dy² ≤ r²: the row reaches k px past the corner centre
+            let mut k = r;
+            while k > 0 && k * k + dy * dy > r * r {
+                k -= 1;
+            }
+            let inset = r - k;
+            self.hline(x + inset, y + yy, w - 2 * inset, mode);
+        }
     }
 
     /// Text in the built-in 3×5 font, `scale`× magnified. Returns the x after the last glyph.

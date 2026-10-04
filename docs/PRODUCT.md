@@ -118,7 +118,7 @@ The tile is about 25 px wide and nearly the full 64 px tall. The glyph is black,
 
 | Page | Glyph |
 |---|---|
-| PAS | The **PAS level number** 0–9, large |
+| PAS | The **PAS level number** 0–9, large, in the **W95FA** font (Windows 95 style pixel font) |
 | PAS, walk assist active | **Up arrow** (↑), replacing the number while LEFT is held |
 | Lights | **Light bulb** |
 | Player | **Music note** |
@@ -570,6 +570,7 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-03 | Mode shown by the battery icon: plain = city, lightning bolt (XOR) = sport |
 | 2026-10-03 | EEPROM: keep version/pas/odo from Swang Stodva, drop the other 12 fields, add mode/locked/trips |
 | 2026-10-04 | Core logic in Rust (was C), thin C platform layer for the SDK; distances stored in meters (see TECH_DESIGN.md) |
+| 2026-10-05 | PAS number font: W95FA |
 | 2026-10-04 | Odometer starts at 0 when switching from Swang Stodva; no migration or seed value |
 | 2026-10-04 | Store the speed limit instead of a mode; sport = limit > 25 (city PIN → 25, sport PIN → 99) |
 | 2026-10-04 | Every trip (manual, battery, ride) tracks max speed and average speed over moving time |

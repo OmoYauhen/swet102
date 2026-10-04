@@ -1,7 +1,8 @@
 //! Desktop emulator: the real swet-heart App in a pixel-exact window.
 //!
-//! Keys: ← → LEFT/RIGHT · ↓ or Space M · P or Esc PWR · L motor link on/off ·
-//! F12 screenshot (PNG next to the binary's working directory).
+//! Display keys: ← → LEFT/RIGHT · ↓ or Space M · P or Esc PWR.
+//! Motor knobs: W/S speed ±1 km/h · E/D current ±1 A · R/F battery ±5 % ·
+//! L link on/off · F12 screenshot (PNG in the working directory).
 
 use std::time::{Duration, Instant};
 
@@ -30,6 +31,8 @@ fn main() {
     let mut buf = vec![0u32; w * h];
     let start = Instant::now();
     let mut shot = 0u32;
+    // the motor only knows whole rpm; keep the km/h target here so ±1 steps never stall
+    let mut kmh = 0u32;
 
     while window.is_open() && !sim.hal().powered_off {
         let mut buttons = 0;
@@ -45,6 +48,30 @@ fn main() {
         }
         sim.hal_mut().buttons = buttons;
 
+        let speed_step = |k| window.is_key_pressed(k, KeyRepeat::Yes);
+        {
+            let m = &mut sim.hal_mut().motor;
+            if speed_step(Key::W) {
+                kmh += 1;
+                m.set_speed_kmh(kmh);
+            }
+            if speed_step(Key::S) {
+                kmh = kmh.saturating_sub(1);
+                m.set_speed_kmh(kmh);
+            }
+            if speed_step(Key::E) {
+                m.current_x2 = m.current_x2.saturating_add(2);
+            }
+            if speed_step(Key::D) {
+                m.current_x2 = m.current_x2.saturating_sub(2);
+            }
+            if speed_step(Key::R) {
+                m.soc = (m.soc + 5).min(100);
+            }
+            if speed_step(Key::F) {
+                m.soc = m.soc.saturating_sub(5);
+            }
+        }
         if window.is_key_pressed(Key::L, KeyRepeat::No) {
             let m = &mut sim.hal_mut().motor;
             m.online = !m.online;
@@ -65,6 +92,16 @@ fn main() {
             sim.tick();
         }
 
+        let m = &sim.hal().motor;
+        let title = format!(
+            "swet102 · motor {} · {kmh} km/h ({} rpm) · {} A · {} % · PAS {}",
+            if m.online { "up" } else { "DOWN" },
+            m.rpm,
+            m.current_x2 / 2,
+            m.soc,
+            sim.app().state().pas,
+        );
+        window.set_title(&title);
         render(&sim.screen(), &mut buf, w);
         if let Err(e) = window.update_with_buffer(&buf, w, h) {
             eprintln!("swet-emu: {e}");
