@@ -13,7 +13,7 @@ mod canvas;
 
 use std::time::{Duration, Instant};
 
-use canvas::{Canvas, Chip};
+use canvas::{Canvas, Chip, UiFont};
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use swet_heart::gfx::{H, W};
 use swet_heart::motor::codec;
@@ -51,14 +51,14 @@ const KEY_CHIP: Chip = Chip {
 
 const MARGIN: i32 = 14;
 const DISP_X: i32 = MARGIN;
-const DISP_Y: i32 = 34;
+const DISP_Y: i32 = 44;
 const DISP_W: i32 = W * SCALE as i32;
 const DISP_H: i32 = H * SCALE as i32;
 const PANEL_X: i32 = DISP_X + DISP_W + 24;
-const PANEL_W: i32 = 330;
+const PANEL_W: i32 = 470;
 const WIN_W: i32 = PANEL_X + PANEL_W + MARGIN;
-const WIN_H: i32 = 560;
-const ROW: i32 = 19;
+const WIN_H: i32 = 700;
+const ROW: i32 = 32;
 
 /// Keys that drive the display's buttons.
 const DISPLAY_KEYS: [(&[Key], u8, &str); 4] = [
@@ -93,6 +93,7 @@ fn main() {
             .ok()
             .and_then(|b| <[u8; swet_heart::STORE_LEN]>::try_from(b.as_slice()).ok())
     };
+    let font = UiFont::load();
     let mut sim = Sim::with_store(stored);
     let mut persisted = stored;
     let mut buf = vec![0u32; w * h];
@@ -181,6 +182,7 @@ fn main() {
             buf: &mut buf,
             w,
             h,
+            font: &font,
         };
         draw(&mut c, &sim, kmh, &held);
         if let Err(e) = window.update_with_buffer(&buf, w, h) {
@@ -200,7 +202,7 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
     // --- the display ---
     c.text("SW102 display", DISP_X, 12, YELLOW);
     let ver = format!("swet102 v{}", config::VERSION);
-    c.text(&ver, DISP_X + DISP_W - Canvas::text_width(&ver), 12, GRAY);
+    c.text(&ver, DISP_X + DISP_W - c.text_width(&ver), 12, GRAY);
     c.outline(DISP_X - 2, DISP_Y - 2, DISP_W + 4, DISP_H + 4, FRAME);
     oled(c, &sim.screen());
 
@@ -217,18 +219,18 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         (true, false) => (YELLOW, "motor: no link yet"),
         (true, true) => (GREEN, "motor link up"),
     };
-    let lx = DISP_X + DISP_W - Canvas::text_width(txt);
+    let lx = DISP_X + DISP_W - c.text_width(txt);
     c.dot(lx - 12, by + 8, 5, dot);
     c.text(txt, lx, by + 2, GRAY);
 
     // --- the panel ---
     let x0 = PANEL_X;
-    let (vx, kx) = (x0 + 92, x0 + 236);
+    let (vx, kx) = (x0 + 136, x0 + 360);
     let mut y = 12;
     let header = |c: &mut Canvas, y: &mut i32, t: &str| {
         c.text(t, x0, *y, CYAN);
-        c.fill(x0, *y + 16, PANEL_W, 1, FRAME);
-        *y += 24;
+        c.fill(x0, *y + 24, PANEL_W, 1, FRAME);
+        *y += 34;
     };
     let row = |c: &mut Canvas, y: &mut i32, label: &str, value: &str| {
         c.text(label, x0, *y, GRAY);
@@ -238,7 +240,7 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
     let keys = |c: &mut Canvas, y: i32, ks: &[(&str, &[Key])]| {
         let mut x = kx;
         for (label, k) in ks {
-            x = c.chip(label, x, y - 2, held(k), KEY_CHIP);
+            x = c.chip(label, x, y - 3, held(k), KEY_CHIP);
         }
     };
 
@@ -354,29 +356,23 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         Power::Dfu { .. } => "rebooting to DFU",
     };
     row(c, &mut y, "Power", power);
-    row(
-        c,
-        &mut y,
-        "Flash",
-        &format!("{} saves", sim.hal().store_writes),
-    );
+    let writes = sim.hal().store_writes;
+    let plural = if writes == 1 { "" } else { "s" };
+    row(c, &mut y, "Flash", &format!("{writes} write{plural}"));
 
-    // legend
-    let ly = WIN_H - 3 * ROW - 8;
-    c.fill(x0, ly - 8, PANEL_W, 1, FRAME);
-    c.text("F12 screenshot   --fresh: empty flash", x0, ly, GRAY);
-    c.text(
-        "PINs (dev build): city 1111, sport 2222",
-        x0,
-        ly + ROW,
-        GRAY,
-    );
-    c.text(
-        "B brake  X error 21  L link  W/S E/D R/F",
-        x0,
-        ly + 2 * ROW,
-        GRAY,
-    );
+    // legend, under the display
+    let ly = by + 52;
+    c.fill(DISP_X, ly - 10, DISP_W, 1, FRAME);
+    for (i, line) in [
+        "F12: PNG of the display     --fresh: start with empty flash",
+        "Dev-build PINs: city 1111, sport 2222",
+        "Motor: B brake, X error 21, L link, W/S speed, E/D current, R/F battery",
+    ]
+    .iter()
+    .enumerate()
+    {
+        c.text(line, DISP_X, ly + i as i32 * ROW, GRAY);
+    }
 }
 
 fn oled(c: &mut Canvas, frame: &swet_heart::Frame) {
@@ -402,11 +398,13 @@ fn snapshot(path: &str, w: usize, h: usize) {
     sim.click(Buttons::RIGHT);
     sim.run_ms(90_000);
     let mut buf = vec![0u32; w * h];
+    let font = UiFont::load();
     draw(
         &mut Canvas {
             buf: &mut buf,
             w,
             h,
+            font: &font,
         },
         &sim,
         kmh,

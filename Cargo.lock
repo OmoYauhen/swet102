@@ -473,6 +473,7 @@ dependencies = [
 name = "swet-emu"
 version = "0.0.1"
 dependencies = [
+ "ab_glyph",
  "minifb",
  "png",
  "swet-heart",
