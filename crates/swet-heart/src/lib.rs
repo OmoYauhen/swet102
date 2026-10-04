@@ -16,6 +16,7 @@ pub use hal::{BleChannel, BleState, Buttons, Diag, Hal, STORE_LEN};
 use input::{Btn, Event, Gesture, Input};
 use motor::{Motor, codec};
 use ui::diag::DiagData;
+use ui::popup::{Fault, Popup, Popups};
 use ui::ride::{Page, RideScreen, View};
 use ui::{Model, Screen, Stack};
 
@@ -44,6 +45,11 @@ pub struct App<H: Hal> {
     state: State,
     orient: u8,
     last_buttons: Buttons,
+    popups: Popups,
+    /// The frame last sent to the display; flush only when it differs
+    /// (the SPI flush costs ~8 ms on this chip, TECH_DESIGN §4.3).
+    sent: Frame,
+    sent_valid: bool,
 }
 
 impl<H: Hal> App<H> {
@@ -64,6 +70,9 @@ impl<H: Hal> App<H> {
             },
             orient: 0, // set in init(), see speed_limit
             last_buttons: Buttons(0),
+            popups: Popups::new(),
+            sent: Frame::new(),
+            sent_valid: false,
         }
     }
 
@@ -71,6 +80,7 @@ impl<H: Hal> App<H> {
         // Defaults until persistence (M3) loads the saved state here.
         self.state.speed_limit = config::CITY_LIMIT_KMH;
         self.orient = config::DISPLAY_ORIENT;
+        self.motor.walk_keepalive_ms = config::WALK_KEEPALIVE_MS;
         self.hal.display_orient(self.orient);
     }
 
@@ -79,10 +89,10 @@ impl<H: Hal> App<H> {
         // 1. input
         let raw = self.hal.buttons();
         self.last_buttons = raw;
-        let cfg = ui::gesture_cfg(self.stack.top(), &self.ride);
+        let cfg = ui::gesture_cfg(self.stack.top(), &self.ride, self.popups.shown());
         let events = self.input.poll(raw, now, cfg);
         for ev in events.iter() {
-            self.dispatch(ev);
+            self.dispatch(ev, now);
         }
 
         // 2. motor: push the wanted state, then run the bus
@@ -95,20 +105,44 @@ impl<H: Hal> App<H> {
         self.motor.set_lights(self.state.lights);
         self.motor.set_speed_limit_kmh(self.state.speed_limit);
         self.motor.step(&mut self.hal, now);
+        let fault = self.fault(now);
+        self.popups.update(fault, now);
 
-        // 3. render
+        // 3. render, and flush only if something changed
         let model = self.model();
         let diag = self.diag_data();
-        ui::render(&mut self.frame, self.stack.top(), &self.ride, &model, &diag);
-        self.hal.display_flush(&self.frame);
+        let (top, popup) = (self.stack.top(), self.popups.shown());
+        ui::render(&mut self.frame, top, &self.ride, &model, &diag, popup);
+        if !self.sent_valid || self.frame != self.sent {
+            self.hal.display_flush(&self.frame);
+            self.sent.clone_from(&self.frame);
+            self.sent_valid = true;
+        }
+    }
+
+    /// Link loss beats an error code (no link, no status). At power-on the
+    /// controller gets the same grace period as a dropped link.
+    fn fault(&self, now: u32) -> Option<Fault> {
+        if !self.motor.link_up() {
+            (now >= config::MOTOR_LINK_TIMEOUT_MS).then_some(Fault::LinkLost)
+        } else {
+            self.motor.error().map(Fault::Code)
+        }
     }
 
     /// Event routing (TECH_DESIGN §5.5): global first, then the top screen,
     /// and on the ride screen LEFT/RIGHT go to the current page.
-    fn dispatch(&mut self, ev: Event) {
+    fn dispatch(&mut self, ev: Event, now: u32) {
         use Gesture::*;
         if ev.btn == Btn::Pwr && ev.g == Hold {
             self.hal.power_off();
+            return;
+        }
+        if self.popups.shown() != Popup::None {
+            // the error screen takes all input; M acknowledges it
+            if (ev.btn, ev.g) == (Btn::M, Click) {
+                self.popups.dismiss(now);
+            }
             return;
         }
         match self.stack.top() {
@@ -125,6 +159,7 @@ impl<H: Hal> App<H> {
                 (Btn::M, Click) => {
                     self.orient = (self.orient + 1) & 3;
                     self.hal.display_orient(self.orient);
+                    self.sent_valid = false; // the panel re-reads its RAM in the new order
                 }
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
@@ -174,6 +209,7 @@ impl<H: Hal> App<H> {
             sd_ram_base: h.diag(Diag::SdRamBase),
             uart_errors: h.diag(Diag::UartErrors),
             motor: self.motor.diag,
+            values: self.motor.values,
         }
     }
 
@@ -190,6 +226,10 @@ impl<H: Hal> App<H> {
         self.stack.top()
     }
 
+    pub fn popup(&self) -> Popup {
+        self.popups.shown()
+    }
+
     pub fn page(&self) -> Page {
         self.ride.page
     }
@@ -200,6 +240,11 @@ impl<H: Hal> App<H> {
 
     pub fn motor(&self) -> &Motor {
         &self.motor
+    }
+
+    /// For the simulator: flip config-like motor knobs (e.g. walk keep-alive).
+    pub fn motor_mut(&mut self) -> &mut Motor {
+        &mut self.motor
     }
 
     pub fn hal(&self) -> &H {

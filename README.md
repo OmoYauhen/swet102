@@ -6,8 +6,8 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M1 — riding screen: PAS page, speed and power views, gestures, motor
-bus. Persistence, lock, trips, menu and BLE come in M3–M5.
+**Status:** M2 — riding screen, gestures, motor bus, error and link-loss screens.
+Persistence, lock, trips, menu and BLE come in M3–M5.
 
 ## Layout
 
@@ -47,7 +47,7 @@ make check                 # size gates
 | L | motor link on / off |
 | F12 | PNG screenshot |
 
-## Using it (M1)
+## Using it (M2)
 
 | Gesture | Does |
 |---|---|
@@ -56,6 +56,7 @@ make check                 # size gates
 | M double-click | speed ↔ power |
 | M hold | diagnostics screen (until the menu exists); there, M cycles the display orientation, PWR goes back |
 | PWR hold | power off |
+| M on the error screen | dismiss it (it returns after 10 s if the fault is still there) |
 
 ## Flashing
 

@@ -169,6 +169,10 @@ impl Sim {
         self.hold(b, 60);
     }
 
+    pub fn app_mut(&mut self) -> &mut App<SimHal> {
+        &mut self.app
+    }
+
     pub fn app(&self) -> &App<SimHal> {
         &self.app
     }

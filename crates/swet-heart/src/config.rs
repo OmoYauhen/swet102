@@ -29,6 +29,11 @@ pub const SPORT_LIMIT_KMH: u8 = 99;
 pub const MOTOR_SLOT_MS: u32 = 100;
 /// No valid reply for this long = link lost.
 pub const MOTOR_LINK_TIMEOUT_MS: u32 = 2000;
+/// Re-send walk assist (PAS 06) this often while held; 0 = only on change
+/// (Swang Stodva behaviour). Set from HW probe page 7 if the controller times it out.
+pub const WALK_KEEPALIVE_MS: u32 = 0;
+/// A dismissed error screen comes back after this long if the fault persists.
+pub const FAULT_REPEAT_MS: u32 = 10_000;
 /// WRITE_SPEED_LIM unit: wheel RPM (true) or Swang Stodva's km/h × 10 (false).
 /// Unverified on stock firmware (TECH_DESIGN §16).
 pub const SPEED_LIMIT_AS_RPM: bool = true;

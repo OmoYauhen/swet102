@@ -30,6 +30,10 @@ impl Op {
     }
 }
 
+/// STATUS values that are not errors.
+pub const STATUS_NORMAL: u8 = 0x01;
+pub const STATUS_BRAKING: u8 = 0x03;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Reply {
     /// 0x01 normal, 0x03 braking, anything else = error code.
