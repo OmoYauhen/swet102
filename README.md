@@ -35,7 +35,13 @@ make check                 # size gates
 
 `nix flake check` runs what CI runs.
 
-### Emulator keys
+### Emulator
+
+![swet102 emulator](docs/emu.png)
+
+The display on the left; on the right the fake BBSHD controller (with what it
+has received from the display: PAS, lights, speed limit) and the display's
+state. Button and key chips light up while held.
 
 | Key | Does |
 |---|---|
@@ -45,8 +51,13 @@ make check                 # size gates
 | W / S | motor speed ± 1 km/h |
 | E / D | motor current ± 1 A |
 | R / F | battery ± 5 % |
+| B | braking on / off (status 03) |
+| X | motor error 21 on / off |
 | L | motor link on / off |
-| F12 | PNG screenshot |
+| F12 | PNG of the display |
+
+`--fresh` starts with empty flash (otherwise `emu-store.bin` is reused);
+`--snapshot=FILE.png` renders a short scripted ride to a PNG without a window.
 
 ## Using it (M4)
 
