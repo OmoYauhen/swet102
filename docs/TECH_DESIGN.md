@@ -238,16 +238,27 @@ What it means:
   because most frames are cheap. Slide animations redraw and flush every frame
   for 150–200 ms, so with the stock flush there are only ~11 ms left for render.
 
-Plan for Swet102:
+What Swet102 did about it, and what it measures on the SW102 (its own diagnostics
+screen, which redraws and flushes on almost every tick, so it is the worst case):
+
+| Build | Change | `TICK US` avg / max | `LCD US` avg / max | `MISS` |
+|---|---|---|---|---|
+| 26100418 (M1) | stock `nrf_drv_spi` flush, per-pixel drawing | 19.1 / 24.6 ms | — | 33 in 2 s → **watchdog reset** |
+| 26100419 | watchdog fed per tick, byte-wise fills and blits | 20.6 / 25.5 ms | — | 1660 |
+| **26100421 (M3)** | **register-level SPI**, fast 3×5 text, flush only on change | **8.2 / 10.2 ms** | **3.36 / 3.45 ms** | **0** |
+
+Same run: stack 2944 of 4096 B never touched (~1.15 KB used), motor 3774 of
+3778 requests answered, 3 saves, 0 flash errors.
 
 1. **Flush only when the frame changed** (core compares with the last sent frame,
-   ~0.1 ms). A still riding screen then costs no SPI time at all. *(M2, PR #3.)*
-2. **Register-level SPI** in `lcd.c`: feed `NRF_SPI0->TXD` with its double buffer
-   and poll `EVENTS_READY`, instead of one `nrf_drv_spi_transfer` per row. Target ≤ 3 ms,
-   which leaves ≥ 15 ms per frame for rendering during animations.
-3. Keep the render small: byte-aligned blits for fonts and fills instead of
-   per-pixel loops. Budget: worst-case render ≤ 10 ms. Measure on the diag screen
-   (`TICK US avg/max`) before optimising further.
+   ~0.1 ms). A still riding screen costs no SPI time at all. *Done (M2).*
+2. **Register-level SPI** in `lcd.c`: keep the double-buffered `NRF_SPI0->TXD` full
+   and poll `EVENTS_READY`, CS held for the whole frame. *Done: 8.3 → 3.4 ms*
+   (target was ≤ 3 ms; 2.4 ms of that is the bytes on the wire at 4 MHz). That
+   leaves ~16.6 ms per frame for rendering during animations.
+3. **Byte-wise drawing** for fills, font/image blits and the 3×5 text. *Done.* The
+   diagnostics screen, the heaviest screen, renders in ~4.8 ms (tick − flush).
+   Budget for the M6 slide animations: worst-case render ≤ 10 ms per frame.
 
 ### 4.4 Nothing in a tick waits
 
@@ -996,3 +1007,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | M3: store record v1 (48 B, §8.1) with clamped decode; settings saved 3 s after the last change, unlock/lock/power-off save at once (an urgent save is never pushed out by the debounce); power-off waits ≤ 500 ms for FDS |
 | 2026-10-05 | M3: PINs from `SWET_PIN_CITY`/`SWET_PIN_SPORT` via swet-heart build.rs; dev PINs 1111/2222 add `-dev`; `make dfu` refuses dev PINs unless `DEV_PINS=1` |
 | 2026-10-05 | M3: FDS file 0x5E70 key 0x0001, CRC on; GC only on no-space; SDK objects depend on sdk_config.h |
+| 2026-10-05 | On-device (26100421): register-level SPI flush 3.4 ms (was 8.3), diag-screen tick 8.2 / 10.2 ms, 0 missed ticks, ~1.15 KB stack used of 4 KB |
