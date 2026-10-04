@@ -6,8 +6,8 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M0 — skeleton and Rust-on-nRF51 trial. The display shows a test
-pattern, not the riding UI yet.
+**Status:** M1 — riding screen: PAS page, speed and power views, gestures, motor
+bus. Persistence, lock, trips, menu and BLE come in M3–M5.
 
 ## Layout
 
@@ -17,6 +17,7 @@ pattern, not the riding UI yet.
 | `crates/swet-fw` | staticlib for the nRF51: `Hal` over FFI, `swet_init` / `swet_tick` |
 | `crates/swet-sim` | simulator: virtual clock, fake motor, golden-frame tests |
 | `crates/swet-emu` | desktop emulator window |
+| `crates/swet-assets` | font/image generator: `assets/*.xbm` → `swet-heart/src/gfx/assets.rs` |
 | `platform/nrf51` | C: main loop, SH1107, UART, SoftDevice glue (nRF5 SDK 12.3 + S130) |
 
 ## Build
@@ -26,12 +27,35 @@ Everything runs inside the Nix dev shell:
 ```sh
 nix develop
 cargo test                 # core + simulator tests
-cargo run -p swet-emu      # emulator: ←/→ LEFT/RIGHT, ↓/Space M, P/Esc PWR, L motor link, F12 PNG
+cargo run -p swet-emu      # emulator, keys below
 make                       # build/swet102.hex
 make check                 # size gates
 ```
 
 `nix flake check` runs what CI runs.
+
+### Emulator keys
+
+| Key | Does |
+|---|---|
+| ← → | LEFT / RIGHT |
+| ↓ or Space | M |
+| P or Esc | PWR |
+| W / S | motor speed ± 1 km/h |
+| E / D | motor current ± 1 A |
+| R / F | battery ± 5 % |
+| L | motor link on / off |
+| F12 | PNG screenshot |
+
+## Using it (M1)
+
+| Gesture | Does |
+|---|---|
+| RIGHT / LEFT | PAS + / − (0–9) |
+| hold LEFT at PAS 0 | walk assist while held (tile shows ↑) |
+| M double-click | speed ↔ power |
+| M hold | diagnostics screen (until the menu exists); there, M cycles the display orientation, PWR goes back |
+| PWR hold | power off |
 
 ## Flashing
 
@@ -50,7 +74,7 @@ After an OTA update the bootloader keeps advertising `SW102_DFU` until you
 `tools/nrfutil.sh` and `tools/openocd.sh` run nrfutil 6.1.7 and OpenOCD in Docker
 (nrfutil needs Python < 3.11; raw USB needs root on NixOS).
 
-## M0 test pattern
+## Diagnostics screen (M hold)
 
 | Shows | Meaning |
 |---|---|
@@ -58,11 +82,8 @@ After an OTA update the bootloader keeps advertising `SW102_DFU` until you
 | `TICK US avg/max`, `MISS` | time spent in one `swet_tick()`, late ticks |
 | `STACK FREE` | bytes of the 4 KB stack never touched |
 | `RAM nK`, `SD BASE` | RAM size from FICR, lowest RAM start the SoftDevice accepts |
-| `MOTOR TX/RX` | a STATUS request every 500 ms and the reply bytes received |
+| `MOT REQ / OK / WR`, `TMO / CHK / STRAY` | motor bus: requests, valid replies, writes, timeouts, bad checksums, stray bytes |
 | L R M P boxes | live button state |
-| moving bar | the tick loop and frame rate |
-
-Hold **PWR** for 1 s to power off.
 
 ## License
 

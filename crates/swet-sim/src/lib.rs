@@ -133,15 +133,39 @@ impl Sim {
         self.app.hal_mut().buttons &= !b;
     }
 
-    /// Press, hold for `ms`, release, and run one more tick.
+    /// Press, hold for `ms`, release, and run until the release is debounced.
     pub fn hold(&mut self, b: u8, ms: u32) {
         self.press(b);
         self.run_ms(ms);
         self.release(b);
-        self.tick();
+        self.run_ms(
+            u32::from(swet_heart::config::DEBOUNCE_SAMPLES + 1) * swet_heart::config::TICK_MS,
+        );
     }
 
     pub fn click(&mut self, b: u8) {
+        self.hold(b, 60);
+    }
+
+    /// Run until the fake motor link is up (first reply decoded) plus one more tick.
+    pub fn boot_to_ride(&mut self) -> &mut Self {
+        for _ in 0..100 {
+            self.tick();
+            if self.app.motor().link_up() {
+                break;
+            }
+        }
+        self.run_ms(1000); // let every value arrive once
+        self
+    }
+
+    pub fn motor(&mut self) -> &mut FakeMotor {
+        &mut self.app.hal_mut().motor
+    }
+
+    pub fn double_click(&mut self, b: u8) {
+        self.hold(b, 60);
+        self.run_ms(100);
         self.hold(b, 60);
     }
 
@@ -168,6 +192,7 @@ impl Sim {
         let path = golden_dir().join(format!("{name}.png"));
         let frame = self.screen();
         if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::create_dir_all(golden_dir()).expect("golden dir");
             write_png(&frame, &path, 1).expect("write golden");
             return;
         }

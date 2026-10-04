@@ -963,3 +963,5 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-04 | Event routing: global → snap animations → popup → top of stack → (ride) current page for LEFT/RIGHT; gesture config latched at button-down |
 | 2026-10-04 | M0: Rust staticlib + SDK 12.3 link cleanly (no builtin clashes); first image 11.1 KB flash / 1.8 KB RAM + 4 KB stack |
 | 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |
+| 2026-10-04 | Fonts: Swang Stodva XBMs (transposed, 0 = lit) converted by `swet-assets` into upright row-major Rust consts; output committed |
+| 2026-10-04 | The App must be zero-initialised (lands in .bss): defaults are set in `init()`, enums with niches get explicit tags; `make check` enforces it |

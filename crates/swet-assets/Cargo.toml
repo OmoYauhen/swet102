@@ -1,0 +1,10 @@
+[package]
+name = "swet-assets"
+description = "Generates crates/swet-heart/src/gfx/assets.rs from the XBM sources in assets/"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+png = "0.18"

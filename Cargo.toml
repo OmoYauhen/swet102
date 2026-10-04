@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/swet-heart", "crates/swet-fw", "crates/swet-sim", "crates/swet-emu"]
+members = ["crates/swet-heart", "crates/swet-fw", "crates/swet-sim", "crates/swet-emu", "crates/swet-assets"]
 # swet-fw is a no_std staticlib for thumbv6m; it's built by the Makefile, not by
 # plain `cargo build` / `cargo test` on the host.
 default-members = ["crates/swet-heart", "crates/swet-sim", "crates/swet-emu"]
