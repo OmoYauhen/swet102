@@ -1,7 +1,7 @@
 //! The riding screen: page tile | info pane | battery (PRODUCT §3).
 
 use super::Model;
-use crate::gfx::assets::{SMALL, SPEED};
+use crate::gfx::assets::{PAS, SMALL, SPEED};
 use crate::gfx::{Frame, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
 
@@ -111,9 +111,9 @@ impl RideScreen {
             Page::Pas => {
                 let mut d = [0u8; 10];
                 let s = num::u32_dec(u32::from(m.pas), &mut d);
-                let gw = SPEED.width(s, 0);
-                let gy = y + (h - i32::from(SPEED.height)) / 2;
-                f.text(&SPEED, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
+                let gw = PAS.width(s, 0);
+                let gy = y + (h - i32::from(PAS.height)) / 2;
+                f.text(&PAS, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
             }
         }
     }

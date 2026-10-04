@@ -440,7 +440,7 @@ formatter, plus a decimal-point helper for `x_10` values.
 - **Fonts:**
   - speed: 04B_30, 34 px, digits only
   - labels: ~7 px, uppercase
-  - tile number: 04B_30, ~40 px
+  - tile number (PAS): **W95FA** (SIL OFL 1.1), rendered on its own 80-unit pixel grid and scaled ×4 → 20×36 px digits
   - popup/menu text: ~8–10 px
 - **Icons:** sparkles (from SS), bulb, music note, key, up arrow, padlock, circular
   arrow, Bluetooth, wrench, "i", download arrow, "!".
@@ -971,6 +971,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-04 | Event routing: global → snap animations → popup → top of stack → (ride) current page for LEFT/RIGHT; gesture config latched at button-down |
 | 2026-10-04 | M0: Rust staticlib + SDK 12.3 link cleanly (no builtin clashes); first image 11.1 KB flash / 1.8 KB RAM + 4 KB stack |
 | 2026-10-05 | HW probe: 32 KB RAM; bootloader at 0x3AC00 → app region ends at 0x37C00 (115 KB), FDS 0x37C00–0x3ABFF; SS flush 8.4 ms → flush only on change + register-level SPI planned |
+| 2026-10-05 | PAS digits in the page tile use W95FA (OFL 1.1, `assets/fonts/`), pixel-exact ×4; `swet-assets` renders outline pixel fonts on their native grid |
 | 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |
 | 2026-10-04 | Fonts: Swang Stodva XBMs (transposed, 0 = lit) converted by `swet-assets` into upright row-major Rust consts; output committed |
 | 2026-10-04 | The App must be zero-initialised (lands in .bss): defaults are set in `init()`, enums with niches get explicit tags; `make check` enforces it |

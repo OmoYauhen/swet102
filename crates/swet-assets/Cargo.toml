@@ -7,4 +7,5 @@ license.workspace = true
 publish = false
 
 [dependencies]
+ab_glyph = "0.2.32"
 png = "0.18"

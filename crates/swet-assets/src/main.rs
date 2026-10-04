@@ -126,6 +126,90 @@ const FONTS: &[FontSrc] = &[
     },
 ];
 
+/// A pixel font drawn as outlines (e.g. W95FA), rendered exactly on its own
+/// pixel grid and then scaled up by an integer factor.
+struct PixelFontSrc {
+    name: &'static str,
+    file: &'static str,
+    chars: &'static str,
+    /// Font units per design pixel, and the grid's x offset in font units.
+    unit: f32,
+    x_origin: f32,
+    scale: usize,
+}
+
+const PIXEL_FONTS: &[PixelFontSrc] = &[PixelFontSrc {
+    // W95FA (SIL OFL 1.1, assets/fonts/W95FA-OFL.txt): PAS number in the page tile.
+    name: "PAS",
+    file: "fonts/W95FA.otf",
+    chars: "0123456789",
+    unit: 80.0,
+    x_origin: 50.0,
+    scale: 4,
+}];
+
+/// Rasterise each char on the font's pixel grid, crop each glyph to its ink
+/// columns and all glyphs to their common ink rows, then scale up.
+fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
+    use ab_glyph::{Font as _, FontRef, PxScale, ScaleFont as _, point};
+    let data = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let font = FontRef::try_from_slice(&data).expect("font");
+    // ab_glyph's PxScale is the pixel height of ascent − descent (not the em),
+    // so this makes one design pixel exactly one output pixel.
+    let px = font.height_unscaled() / src.unit;
+    let scaled = font.as_scaled(PxScale::from(px));
+    const CANVAS: usize = 64;
+    let baseline = 48.0;
+    let mut glyphs: Vec<Vec<bool>> = Vec::new();
+    for c in src.chars.chars() {
+        let mut g = scaled.scaled_glyph(c);
+        g.position = point(-src.x_origin / src.unit, baseline);
+        let mut canvas = vec![false; CANVAS * CANVAS];
+        if let Some(o) = font.outline_glyph(g) {
+            let b = o.px_bounds();
+            o.draw(|x, y, v| {
+                let (cx, cy) = (b.min.x as i32 + x as i32, b.min.y as i32 + y as i32);
+                if v >= 0.5 && (0..CANVAS as i32).contains(&cx) && (0..CANVAS as i32).contains(&cy)
+                {
+                    canvas[cy as usize * CANVAS + cx as usize] = true;
+                }
+            });
+        }
+        glyphs.push(canvas);
+    }
+    let rows: Vec<usize> = (0..CANVAS)
+        .filter(|&y| {
+            glyphs
+                .iter()
+                .any(|g| (0..CANVAS).any(|x| g[y * CANVAS + x]))
+        })
+        .collect();
+    let (top, bottom) = (rows[0], rows[rows.len() - 1] + 1);
+    let h = (bottom - top) * src.scale;
+    let mut cols: Vec<(usize, usize, usize)> = Vec::new(); // (glyph, x0, x1)
+    for (i, g) in glyphs.iter().enumerate() {
+        let ink: Vec<usize> = (0..CANVAS)
+            .filter(|&x| (top..bottom).any(|y| g[y * CANVAS + x]))
+            .collect();
+        cols.push((i, ink[0], ink[ink.len() - 1] + 1));
+    }
+    let w: usize = cols.iter().map(|&(_, a, b)| (b - a) * src.scale).sum();
+    let mut px_out = vec![false; w * h];
+    let mut offsets = vec![0u16];
+    let mut ox = 0;
+    for &(i, x0, x1) in &cols {
+        for y in 0..h {
+            for x in 0..(x1 - x0) * src.scale {
+                let (sx, sy) = (x0 + x / src.scale, top + y / src.scale);
+                px_out[y * w + ox + x] = glyphs[i][sy * CANVAS + sx];
+            }
+        }
+        ox += (x1 - x0) * src.scale;
+        offsets.push(ox as u16);
+    }
+    (Bitmap { w, h, px: px_out }, offsets)
+}
+
 const IMAGES: &[(&str, &str)] = &[("SPARKLES", "ss/sparkles.xbm")];
 
 fn bytes_lit(out: &mut String, bits: &[u8]) {
@@ -170,6 +254,30 @@ fn main() {
             "\n/// From `{}` ({} px tall).\npub static {}: Font = Font {{\n    height: {},\n    \
              stride: {stride},\n    chars: b\"{}\",\n    offsets: &{offs:?},\n    bits: &[",
             f.file,
+            bmp.h,
+            f.name,
+            bmp.h,
+            f.chars.escape_default()
+        );
+        bytes_lit(&mut out, &bits);
+        out.push_str("],\n};\n");
+        if preview {
+            write_png(
+                &bmp,
+                &preview_dir.join(format!("{}.png", f.name.to_lowercase())),
+            );
+        }
+    }
+
+    for f in PIXEL_FONTS {
+        let (bmp, offs) = read_pixel_font(&assets.join(f.file), f);
+        let (stride, bits) = bmp.pack();
+        let _ = write!(
+            out,
+            "\n/// From `{}` (pixel grid × {}, {} px tall).\npub static {}: Font = Font {{\n    height: {},\n    \
+             stride: {stride},\n    chars: b\"{}\",\n    offsets: &{offs:?},\n    bits: &[",
+            f.file,
+            f.scale,
             bmp.h,
             f.name,
             bmp.h,

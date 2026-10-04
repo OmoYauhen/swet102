@@ -89,3 +89,6 @@ After an OTA update the bootloader keeps advertising `SW102_DFU` until you
 
 GPL-3.0. Some low-level code is adapted from
 [Swang Stodva](https://github.com/OmoYauhen/swang-stodva) and casainho's SW102 firmware.
+
+Fonts: 04B_30 digits (via Swang Stodva); **W95FA** by FontsArena, SIL Open Font
+License 1.1 (`assets/fonts/W95FA-OFL.txt`).
