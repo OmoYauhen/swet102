@@ -6,8 +6,8 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M1 — riding screen: PAS page, speed and power views, gestures, motor
-bus. Persistence, lock, trips, menu and BLE come in M3–M5.
+**Status:** M3 — riding screen, motor bus, error screens, saved settings, lock
+with city/sport PINs, auto power-off. Trips, menu and BLE come in M4–M5.
 
 ## Layout
 
@@ -47,15 +47,23 @@ make check                 # size gates
 | L | motor link on / off |
 | F12 | PNG screenshot |
 
-## Using it (M1)
+## Using it (M3)
 
 | Gesture | Does |
 |---|---|
 | RIGHT / LEFT | PAS + / − (0–9) |
 | hold LEFT at PAS 0 | walk assist while held (tile shows ↑) |
 | M double-click | speed ↔ power |
-| M hold | diagnostics screen (until the menu exists); there, M cycles the display orientation, PWR goes back |
-| PWR hold | power off |
+| M hold | diagnostics screen (until the menu exists); PWR goes back |
+| PWR hold | power off (settings are saved first) |
+| PWR double-click | **lock**: padlock, then off. The next power-on asks for a PIN |
+| PIN screen: LEFT / RIGHT, M, PWR | change the digit, next digit, back one digit |
+| M on the error screen | dismiss it (it returns after 10 s if the fault is still there) |
+
+The **city PIN** unlocks with a 25 km/h limit, the **sport PIN** with 99 km/h
+(a lightning bolt in the battery icon). PAS, mode and lock survive power-off;
+the display switches itself off after 5 minutes without movement, motor current
+or buttons.
 
 ## Flashing
 
@@ -64,12 +72,17 @@ The display keeps casainho's bootloader and S130. Firmware updates need a
 downgrades); `version.mk` makes it date-based.
 
 ```sh
-make dfu        # build/swet102-<VERSION_NUM>.zip → nRF Toolbox → DFU
+SWET_PIN_CITY=xxxx SWET_PIN_SPORT=yyyy make dfu   # build/swet102-<VERSION_NUM>.zip → nRF Toolbox → DFU
 make flash-app  # over SWD (WCH-LinkE in DAP mode), keeps bootloader + S130
 ```
 
 After an OTA update the bootloader keeps advertising `SW102_DFU` until you
 **power off and start the display with a long PWR press**.
+
+**PINs** are built into the firmware from `SWET_PIN_CITY` and `SWET_PIN_SPORT`
+(4 digits each, different). They are never stored in the repo. Without them
+(tests, emulator, CI) the public dev PINs **1111 / 2222** are used and the version
+shows `-dev`; `make dfu` refuses that unless you add `DEV_PINS=1` for a bench build.
 
 `tools/nrfutil.sh` and `tools/openocd.sh` run nrfutil 6.1.7 and OpenOCD in Docker
 (nrfutil needs Python < 3.11; raw USB needs root on NixOS).
@@ -78,12 +91,13 @@ After an OTA update the bootloader keeps advertising `SW102_DFU` until you
 
 | Shows | Meaning |
 |---|---|
-| ↑ TOP, pixel at top-left, block at bottom-right | which way is up; **M click** cycles the 4 SH1107 orientations (`OR n`) |
 | `TICK US avg/max`, `MISS` | time spent in one `swet_tick()`, late ticks |
 | `STACK FREE` | bytes of the 4 KB stack never touched |
 | `RAM nK`, `SD BASE` | RAM size from FICR, lowest RAM start the SoftDevice accepts |
 | `MOT REQ / OK / WR`, `TMO / CHK / STRAY` | motor bus: requests, valid replies, writes, timeouts, bad checksums, stray bytes |
 | L R M P boxes | live button state |
+| `LCD US avg/max` | time of one display flush |
+| `SAVE`, `SERR` | settings saves since power-on, failed flash writes |
 
 ## License
 

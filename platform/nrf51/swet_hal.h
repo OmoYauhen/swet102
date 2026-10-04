@@ -12,7 +12,6 @@
 /* Implemented in C (platform/nrf51/hal.c), called by Rust. */
 void     hal_display_flush(const uint8_t *fb);      /* 64 rows × 16 bytes */
 void     hal_display_contrast(uint8_t level);
-void     hal_display_orient(uint8_t mode);          /* bit0 seg remap, bit1 COM scan */
 uint8_t  hal_buttons(void);                         /* bit0 LEFT, bit1 RIGHT, bit2 M, bit3 PWR */
 void     hal_uart_write(const uint8_t *buf, uint8_t len);
 int16_t  hal_uart_read(void);                       /* -1 = empty */

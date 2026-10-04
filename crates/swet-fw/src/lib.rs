@@ -14,7 +14,6 @@ mod ffi {
     unsafe extern "C" {
         pub fn hal_display_flush(fb: *const u8);
         pub fn hal_display_contrast(level: u8);
-        pub fn hal_display_orient(mode: u8);
         pub fn hal_buttons() -> u8;
         pub fn hal_uart_write(buf: *const u8, len: u8);
         pub fn hal_uart_read() -> i16;
@@ -40,9 +39,6 @@ impl Hal for FwHal {
     }
     fn display_contrast(&mut self, level: u8) {
         unsafe { ffi::hal_display_contrast(level) }
-    }
-    fn display_orient(&mut self, mode: u8) {
-        unsafe { ffi::hal_display_orient(mode) }
     }
     fn buttons(&mut self) -> Buttons {
         Buttons(unsafe { ffi::hal_buttons() })

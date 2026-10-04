@@ -430,7 +430,7 @@ motor reports it. No text descriptions. Lost motor link uses the same screen wit
 └──────────────────────────────────────────┘
 ```
 
-M dismisses the screen. It comes back if the condition is still present after a timeout, or if a new error arrives.
+M dismisses the screen. It comes back after **10 s** if the condition is still present, or straight away if a new error arrives. A motor error clears after 3 normal status replies; braking (status `03`) is not an error. After power-on the motor gets 2 s to answer before the `--` screen appears.
 
 ### Power
 
@@ -571,6 +571,7 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-03 | EEPROM: keep version/pas/odo from Swang Stodva, drop the other 12 fields, add mode/locked/trips |
 | 2026-10-04 | Core logic in Rust (was C), thin C platform layer for the SDK; distances stored in meters (see TECH_DESIGN.md) |
 | 2026-10-05 | PAS number font: W95FA |
+| 2026-10-05 | Error screen: returns after 10 s if still present; 2 s grace after power-on; error code and "!" in W95FA |
 | 2026-10-04 | Odometer starts at 0 when switching from Swang Stodva; no migration or seed value |
 | 2026-10-04 | Store the speed limit instead of a mode; sport = limit > 25 (city PIN → 25, sport PIN → 99) |
 | 2026-10-04 | Every trip (manual, battery, ride) tracks max speed and average speed over moving time |

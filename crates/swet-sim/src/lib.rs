@@ -11,6 +11,9 @@ use swet_heart::{App, BleChannel, BleState, Buttons, Diag, Frame, Hal, STORE_LEN
 
 pub use motor::FakeMotor;
 
+/// How long a simulated flash write takes (FDS update incl. a page erase).
+pub const STORE_WRITE_US: u64 = 40_000;
+
 #[derive(Default)]
 pub struct SimHal {
     pub now_us: u64,
@@ -19,9 +22,13 @@ pub struct SimHal {
     pub uart_log: Vec<u8>,
     pub flushes: u32,
     pub last_flush: Option<Frame>,
-    pub orient: u8,
     pub contrast: u8,
+    /// What is in "flash".
     pub store: Option<[u8; STORE_LEN]>,
+    /// A write in progress and when it lands (FDS is asynchronous; a write
+    /// still in flight when power is cut is lost).
+    pub store_inflight: Option<([u8; STORE_LEN], u64)>,
+    pub store_writes: u32,
     pub ble: BleState,
     pub ble_notifies: Vec<(BleChannel, Vec<u8>)>,
     pub powered_off: bool,
@@ -35,9 +42,6 @@ impl Hal for SimHal {
     }
     fn display_contrast(&mut self, level: u8) {
         self.contrast = level;
-    }
-    fn display_orient(&mut self, mode: u8) {
-        self.orient = mode;
     }
     fn buttons(&mut self) -> Buttons {
         Buttons(self.buttons)
@@ -59,10 +63,10 @@ impl Hal for SimHal {
         }
     }
     fn store_save(&mut self, buf: &[u8; STORE_LEN]) {
-        self.store = Some(*buf);
+        self.store_inflight = Some((*buf, self.now_us + STORE_WRITE_US));
     }
     fn store_busy(&self) -> bool {
-        false
+        self.store_inflight.is_some()
     }
     fn ble_state(&self) -> BleState {
         self.ble
@@ -75,6 +79,7 @@ impl Hal for SimHal {
     }
     fn power_off(&mut self) {
         self.powered_off = true;
+        self.store_inflight = None; // cut mid-write: lost
     }
     fn reboot_to_dfu(&mut self) {
         self.dfu_requested = true;
@@ -100,11 +105,25 @@ impl Default for Sim {
 }
 
 impl Sim {
-    /// A powered-on display: `init()` done, no ticks run yet.
+    /// A powered-on display with empty flash: `init()` done, no ticks run yet.
     pub fn new() -> Self {
-        let mut app = App::new(SimHal::default());
+        Self::with_store(None)
+    }
+
+    /// A powered-on display whose flash already holds `store`.
+    pub fn with_store(store: Option<[u8; STORE_LEN]>) -> Self {
+        let hal = SimHal {
+            store,
+            ..SimHal::default()
+        };
+        let mut app = App::new(hal);
         app.init(0);
         Self { app, now_ms: 0 }
+    }
+
+    /// Power-cycle: a fresh display that boots from what reached flash.
+    pub fn reboot(&self) -> Self {
+        Self::with_store(self.hal().store)
     }
 
     pub fn now_ms(&self) -> u32 {
@@ -113,14 +132,25 @@ impl Sim {
 
     /// Advance one 20 ms tick.
     pub fn tick(&mut self) {
+        if self.hal().powered_off {
+            return; // nothing runs without power
+        }
         self.now_ms += config::TICK_MS;
-        self.app.hal_mut().now_us = u64::from(self.now_ms) * 1000;
+        let hal = self.app.hal_mut();
+        hal.now_us = u64::from(self.now_ms) * 1000;
+        if let Some((buf, at)) = hal.store_inflight
+            && hal.now_us >= at
+        {
+            hal.store = Some(buf);
+            hal.store_inflight = None;
+            hal.store_writes += 1;
+        }
         self.app.tick(self.now_ms);
     }
 
     pub fn run_ms(&mut self, ms: u32) {
         let end = self.now_ms + ms;
-        while self.now_ms < end {
+        while self.now_ms < end && !self.hal().powered_off {
             self.tick();
         }
     }
@@ -167,6 +197,10 @@ impl Sim {
         self.hold(b, 60);
         self.run_ms(100);
         self.hold(b, 60);
+    }
+
+    pub fn app_mut(&mut self) -> &mut App<SimHal> {
+        &mut self.app
     }
 
     pub fn app(&self) -> &App<SimHal> {

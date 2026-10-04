@@ -29,6 +29,7 @@
 #define SCHED_EVT_SIZE          0   /* SoftDevice events carry no payload; the tick timer bypasses the scheduler */
 #define SCHED_QUEUE_SIZE        16
 #define STACK_PAINT             0xDEADBEEFu
+#define MAX_CATCH_UP            5   /* ticks run back-to-back at most */
 
 struct platform_diag g_diag;
 
@@ -69,6 +70,11 @@ static uint32_t stack_free_bytes(void)
 
 static void ble_evt(ble_evt_t *evt) { (void)evt; }
 
+static void sys_evt(uint32_t evt)
+{
+    store_sys_evt(evt); /* fstorage completes flash operations on these */
+}
+
 static void softdevice_init(void)
 {
     nrf_clock_lf_cfg_t lf = NRF_CLOCK_LFCLKSRC;
@@ -84,6 +90,7 @@ static void softdevice_init(void)
     g_diag.sd_ram_base = ram_base;
     APP_ERROR_CHECK(err);
     APP_ERROR_CHECK(softdevice_ble_evt_handler_set(ble_evt));
+    APP_ERROR_CHECK(softdevice_sys_evt_handler_set(sys_evt));
 }
 
 static void gpio_init(void)
@@ -97,12 +104,22 @@ static void gpio_init(void)
     nrf_gpio_pin_clear(PIN_LCD_RES); /* hold the OLED in reset until lcd_init */
 }
 
+uint32_t platform_ticks(void)
+{
+    return app_timer_cnt_get();
+}
+
+uint32_t platform_us_since(uint32_t t0)
+{
+    uint32_t ticks;
+    (void)app_timer_cnt_diff_compute(app_timer_cnt_get(), t0, &ticks);
+    return (uint32_t)(((uint64_t)ticks * 1000000u) >> 15); /* RTC1 @ 32768 Hz */
+}
+
 static void measure(uint32_t t0)
 {
     static uint32_t sum_us, n;
-    uint32_t ticks;
-    (void)app_timer_cnt_diff_compute(app_timer_cnt_get(), t0, &ticks);
-    uint32_t us = (uint32_t)(((uint64_t)ticks * 1000000u) >> 15); /* RTC1 @ 32768 Hz */
+    uint32_t us = platform_us_since(t0);
     if (us > g_diag.tick_max_us) {
         g_diag.tick_max_us = us;
     }
@@ -126,6 +143,7 @@ int main(void)
 
     lcd_init();
     hal_init();
+    store_init(); /* before swet_init(): the core loads its record in init() */
 
     swet_init(0);
 
@@ -140,11 +158,18 @@ int main(void)
     uint32_t done = 0;
     for (;;) {
         app_sched_execute();
-        while (done != m_ticks_isr) {
-            uint32_t behind = m_ticks_isr - done;
-            if (behind > 1) {
-                g_diag.missed_ticks += behind - 1;
-            }
+        uint32_t target = m_ticks_isr;
+        uint32_t behind = target - done;
+        if (behind > 1) {
+            g_diag.missed_ticks += behind - 1;
+        }
+        /* Never spiral: if ticks run long, drop the oldest instead of chasing
+         * them forever. The core works on timestamps, so skipped ticks only
+         * cost smoothness, not correctness. */
+        if (behind > MAX_CATCH_UP) {
+            done = target - MAX_CATCH_UP;
+        }
+        while (done != target) {
             done++;
             uint32_t t0 = app_timer_cnt_get();
             swet_tick(done * TICK_MS);
@@ -152,8 +177,12 @@ int main(void)
             if (done % 5 == 0) {
                 g_diag.stack_free = stack_free_bytes();
             }
+            /* Each finished tick is progress. Feeding only after catching up
+             * starved the watchdog whenever ticks took ~20 ms (M1 on hardware:
+             * reset → power latch released → display off after 2 s). A core
+             * stuck inside swet_tick() still trips it. */
+            nrf_drv_wdt_channel_feed(m_wdt);
         }
-        nrf_drv_wdt_channel_feed(m_wdt);
         (void)sd_app_evt_wait();
     }
 }

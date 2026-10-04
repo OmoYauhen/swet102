@@ -951,7 +951,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
 | 4 | **GPREGRET DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | Write 0xB1 + reset, watch for `SW102_DFU` |
-| 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0` → `DISPLAY_ORIENT = 1`. | — |
+| 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0`, hardcoded in the LCD init sequence. | — |
 | 6 | **Walk-assist keep-alive** | Does the stock controller time out PAS 06? | Hold walk for 30 s on the stand |
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
 | 8 | **Auto-connect in the field** | Phone background behavior varies by vendor | Ride with the app on your own phone |
@@ -989,6 +989,10 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | HW probe: 32 KB RAM; bootloader at 0x3AC00 → app region ends at 0x37C00 (115 KB), FDS 0x37C00–0x3ABFF; SS flush 8.4 ms → flush only on change + register-level SPI planned |
 | 2026-10-05 | PAS digits in the page tile use W95FA (OFL 1.1, `assets/fonts/`), pixel-exact ×4; `swet-assets` renders outline pixel fonts on their native grid |
 | 2026-10-05 | Probe frame timing on a 757 s ride: SS flush 8.3 ms every frame (fixed cost), render 2.8 ms avg / 17.9 ms max, 0.5 % of ticks over 20 ms. Register-level SPI (≤ 3 ms) stays required for 50 fps slides; render budget ≤ 10 ms |
+| 2026-10-05 | M2: popup layer (error code / link lost) with repr(u8) enums so the App stays in .bss; boot grace = link timeout; display flushed only when the frame changed (+1 KB RAM for the sent copy); `WALK_KEEPALIVE_MS` config (0 = off until probe page 7) |
 | 2026-10-04 | Reset_Handler jumps straight to `main` (`__START=main`, `__STARTUP_CLEAR_BSS`, `-nostartfiles`): no newlib `_start`/`exit`/stdio in the image |
 | 2026-10-04 | Fonts: Swang Stodva XBMs (transposed, 0 = lit) converted by `swet-assets` into upright row-major Rust consts; output committed |
 | 2026-10-04 | The App must be zero-initialised (lands in .bss): defaults are set in `init()`, enums with niches get explicit tags; `make check` enforces it |
+| 2026-10-05 | M3: store record v1 (48 B, §8.1) with clamped decode; settings saved 3 s after the last change, unlock/lock/power-off save at once (an urgent save is never pushed out by the debounce); power-off waits ≤ 500 ms for FDS |
+| 2026-10-05 | M3: PINs from `SWET_PIN_CITY`/`SWET_PIN_SPORT` via swet-heart build.rs; dev PINs 1111/2222 add `-dev`; `make dfu` refuses dev PINs unless `DEV_PINS=1` |
+| 2026-10-05 | M3: FDS file 0x5E70 key 0x0001, CRC on; GC only on no-space; SDK objects depend on sdk_config.h |

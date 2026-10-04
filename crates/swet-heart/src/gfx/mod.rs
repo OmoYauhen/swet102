@@ -57,6 +57,15 @@ impl Font {
     }
 }
 
+#[inline(always)]
+fn apply(byte: &mut u8, mask: u8, mode: Mode) {
+    match mode {
+        Mode::Set => *byte |= mask,
+        Mode::Clear => *byte &= !mask,
+        Mode::Xor => *byte ^= mask,
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     Set,
@@ -94,12 +103,22 @@ impl Frame {
         }
     }
 
+    /// Filled rectangle, clipped. Works a byte (8 px) at a time.
     pub fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, mode: Mode) {
         let (x0, x1) = (x.max(0), (x + w).min(W));
         let (y0, y1) = (y.max(0), (y + h).min(H));
+        if x0 >= x1 {
+            return;
+        }
         for yy in y0..y1 {
-            for xx in x0..x1 {
-                self.pixel(xx, yy, mode);
+            let row = &mut self.0[yy as usize];
+            let mut cx = x0;
+            while cx < x1 {
+                let bit = cx & 7;
+                let n = (8 - bit).min(x1 - cx);
+                let mask = (((1u16 << n) - 1) << bit) as u8;
+                apply(&mut row[(cx >> 3) as usize], mask, mode);
+                cx += n;
             }
         }
     }
@@ -134,13 +153,28 @@ impl Frame {
         mode: Mode,
     ) {
         let stride = usize::from(stride);
-        for y in 0..h {
-            let row = &bits[y as usize * stride..];
-            for x in 0..w {
-                let s = (sx + x) as usize;
-                if row[s >> 3] & (1 << (s & 7)) != 0 {
-                    self.pixel(dx + x, dy + y, mode);
+        // clip once: source columns i in [i0, i1), rows y in [y0, y1)
+        let (i0, i1) = ((-dx).max(0), w.min(W - dx));
+        let (y0, y1) = ((-dy).max(0), h.min(H - dy));
+        if i0 >= i1 {
+            return;
+        }
+        for y in y0..y1 {
+            let src = &bits[y as usize * stride..(y as usize + 1) * stride];
+            let dst = &mut self.0[(dy + y) as usize];
+            let mut i = i0;
+            while i < i1 {
+                // up to 8 px that land in one destination byte
+                let d = dx + i;
+                let n = (8 - (d & 7)).min(i1 - i);
+                let s = (sx + i) as usize;
+                let lo = u16::from(src[s >> 3]);
+                let hi = src.get((s >> 3) + 1).map_or(0, |&b| u16::from(b));
+                let v = ((lo | hi << 8) >> (s & 7)) & ((1u16 << n) - 1);
+                if v != 0 {
+                    apply(&mut dst[(d >> 3) as usize], (v << (d & 7)) as u8, mode);
                 }
+                i += n;
             }
         }
     }
@@ -205,6 +239,27 @@ impl Frame {
         let mut cx = x;
         for &c in s {
             let g = font3x5::glyph(c);
+            // Fast path: unscaled and fully on screen. Each glyph row is 3 bits
+            // written with one or two masked byte ops (the diagnostics screen
+            // draws ~700 of these per frame).
+            if scale == 1 && cx >= 0 && cx + 3 <= W && y >= 0 && y + 5 <= H {
+                for row in 0..5 {
+                    let r = (g >> ((4 - row) * 3)) & 7; // bit2 = leftmost
+                    if r == 0 {
+                        continue;
+                    }
+                    let v = ((r & 4) >> 2) | (r & 2) | ((r & 1) << 2); // LSB = leftmost
+                    let m = v << (cx & 7);
+                    let line = &mut self.0[(y + row) as usize];
+                    let i = (cx >> 3) as usize;
+                    apply(&mut line[i], m as u8, mode);
+                    if m > 0xFF {
+                        apply(&mut line[i + 1], (m >> 8) as u8, mode);
+                    }
+                }
+                cx += 4;
+                continue;
+            }
             for row in 0..5 {
                 for col in 0..3 {
                     if g & (1 << ((4 - row) * 3 + (2 - col))) != 0 {
@@ -241,6 +296,133 @@ mod tests {
         f.fill_rect(120, 60, 20, 20, Mode::Set);
         assert!(f.get(127, 63));
         assert!(!f.get(119, 63));
+    }
+
+    /// Pixel-at-a-time reference for the byte-wise fast paths.
+    #[allow(clippy::too_many_arguments)]
+    fn naive_blit(
+        f: &mut Frame,
+        bits: &[u8],
+        stride: u16,
+        sx: i32,
+        w: i32,
+        h: i32,
+        dx: i32,
+        dy: i32,
+        mode: Mode,
+    ) {
+        let stride = usize::from(stride);
+        for y in 0..h {
+            for x in 0..w {
+                let s = (sx + x) as usize;
+                if bits[y as usize * stride + (s >> 3)] & (1 << (s & 7)) != 0 {
+                    f.pixel(dx + x, dy + y, mode);
+                }
+            }
+        }
+    }
+
+    fn background() -> Frame {
+        let mut f = Frame::new();
+        for y in 0..H {
+            for x in 0..W {
+                if (x * 7 + y * 3) % 5 < 2 {
+                    f.pixel(x, y, Mode::Set);
+                }
+            }
+        }
+        f
+    }
+
+    #[test]
+    fn fast_text_matches_pixel_reference() {
+        use super::assets::{SPEED, W95};
+        for font in [&W95, &SPEED] {
+            for (dx, dy) in [
+                (0, 0),
+                (3, 5),
+                (-7, -3),
+                (110, 40),
+                (5, 50),
+                (-25, 10),
+                (127, 63),
+            ] {
+                for mode in [Mode::Set, Mode::Clear, Mode::Xor] {
+                    let mut fast = background();
+                    let mut slow = fast.clone();
+                    fast.text(font, font.chars, dx, dy, 1, mode);
+                    let mut cx = dx;
+                    for &c in font.chars {
+                        let (sx, w) = font.glyph(c).expect("glyph");
+                        naive_blit(
+                            &mut slow,
+                            font.bits,
+                            font.stride,
+                            sx,
+                            w,
+                            i32::from(font.height),
+                            cx,
+                            dy,
+                            mode,
+                        );
+                        cx += w + 1;
+                    }
+                    assert!(fast == slow, "text differs at ({dx},{dy}) {mode:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fast_text3x5_matches_pixel_reference() {
+        let s = b"SWET102 V0.0.1 OR1 TICK US 20558/25512 :%-+=<>!?()";
+        for (x, y) in [(0, 0), (3, 12), (5, 59), (1, 30), (-2, 4), (100, 61)] {
+            for mode in [Mode::Set, Mode::Clear, Mode::Xor] {
+                let mut fast = background();
+                let mut slow = fast.clone();
+                fast.text3x5(x, y, s, 1, mode);
+                // scale 2 never takes the fast path: use it as the reference shape
+                let mut cx = x;
+                for &c in s.iter() {
+                    let g = super::font3x5::glyph(c);
+                    for row in 0..5 {
+                        for col in 0..3 {
+                            if g & (1 << ((4 - row) * 3 + (2 - col))) != 0 {
+                                slow.pixel(cx + col, y + row, mode);
+                            }
+                        }
+                    }
+                    cx += 4;
+                }
+                assert!(fast == slow, "3x5 text differs at ({x},{y}) {mode:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn fast_fill_matches_pixel_reference() {
+        for (x, y, w, h) in [
+            (0, 0, 128, 64),
+            (3, 2, 1, 1),
+            (5, 5, 11, 7),
+            (-4, -4, 10, 10),
+            (120, 60, 20, 20),
+            (7, 9, 9, 3),
+            (8, 0, 8, 64),
+            (0, 0, 0, 5),
+        ] {
+            for mode in [Mode::Set, Mode::Clear, Mode::Xor] {
+                let mut fast = background();
+                let mut slow = fast.clone();
+                fast.fill_rect(x, y, w, h, mode);
+                for yy in y..y + h {
+                    for xx in x..x + w {
+                        slow.pixel(xx, yy, mode);
+                    }
+                }
+                assert!(fast == slow, "fill differs for ({x},{y},{w},{h}) {mode:?}");
+            }
+        }
     }
 
     #[test]

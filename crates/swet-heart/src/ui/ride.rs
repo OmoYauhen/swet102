@@ -1,7 +1,7 @@
 //! The riding screen: page tile | info pane | battery (PRODUCT §3).
 
 use super::Model;
-use crate::gfx::assets::{PAS, SMALL, SPEED};
+use crate::gfx::assets::{SMALL, SPEED, W95};
 use crate::gfx::{Frame, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
 
@@ -111,9 +111,9 @@ impl RideScreen {
             Page::Pas => {
                 let mut d = [0u8; 10];
                 let s = num::u32_dec(u32::from(m.pas), &mut d);
-                let gw = PAS.width(s, 0);
-                let gy = y + (h - i32::from(PAS.height)) / 2;
-                f.text(&PAS, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
+                let gw = W95.width(s, 0);
+                let gy = y + (h - i32::from(W95.height)) / 2;
+                f.text(&W95, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
             }
         }
     }
@@ -180,5 +180,27 @@ fn render_battery(f: &mut Frame, m: &Model) {
         f.text3x5(BAT_X + (12 - tw) / 2 + 1, 56, s, 1, Mode::Set);
     } else {
         f.text3x5(BAT_X + 3, 56, b"--", 1, Mode::Set);
+    }
+    if m.sport {
+        bolt(f, x + 2, y + 6);
+    }
+}
+
+/// Sport mode (PRODUCT §3.3): a lightning bolt XOR-ed over the battery body,
+/// black on the filled part and white on the empty part. 6 px wide, every
+/// row drawn twice → 18 px tall.
+fn bolt(f: &mut Frame, x: i32, y: i32) {
+    const ROWS: [&[u8; 6]; 9] = [
+        b"....##", b"...##.", b"..##..", b".##...", b"######", b"...##.", b"..##..", b".##...",
+        b"##....",
+    ];
+    for (r, row) in ROWS.iter().enumerate() {
+        for (c, &px) in row.iter().enumerate() {
+            if px == b'#' {
+                let (px_x, px_y) = (x + c as i32, y + 2 * r as i32);
+                f.pixel(px_x, px_y, Mode::Xor);
+                f.pixel(px_x, px_y + 1, Mode::Xor);
+            }
+        }
     }
 }

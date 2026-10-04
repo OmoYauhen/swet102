@@ -139,10 +139,11 @@ struct PixelFontSrc {
 }
 
 const PIXEL_FONTS: &[PixelFontSrc] = &[PixelFontSrc {
-    // W95FA (SIL OFL 1.1, assets/fonts/W95FA-OFL.txt): PAS number in the page tile.
-    name: "PAS",
+    // W95FA (SIL OFL 1.1, assets/fonts/W95FA-OFL.txt): PAS number in the page
+    // tile, "!" and the hex code on the error screen.
+    name: "W95",
     file: "fonts/W95FA.otf",
-    chars: "0123456789",
+    chars: "!0123456789ABCDEF",
     unit: 80.0,
     x_origin: 50.0,
     scale: 4,

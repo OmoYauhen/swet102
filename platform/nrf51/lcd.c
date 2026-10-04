@@ -5,8 +5,11 @@
  * (Copyright (C) lowPerformer, 2019; init bytes sampled by casainho from the
  * stock SW102 firmware). Released under the GPL License, Version 3.
  *
- * Blocking SPI on purpose: the non-blocking transaction manager's IRQ rate
- * stalled the CPU just as much (see Swang Stodva lcd.c).
+ * The SPI driver (nrf_drv_spi) only sets the peripheral up. Bytes go out
+ * through a register-level loop: the nRF51 SPI has no DMA, and the driver's
+ * per-transfer and per-byte overhead made a full flush cost ~8.3 ms (HW probe,
+ * TECH_DESIGN §4.3). Writing TXD with its double buffer and polling
+ * EVENTS_READY keeps the bus busy back to back.
  */
 #include "platform.h"
 
@@ -22,12 +25,13 @@ static const uint8_t m_init[] = {
     0xAE,       /* display off */
     0xA8, 0x3F, /* multiplex ratio */
     0xD5, 0x50, /* clock divide / oscillator */
-    0xC0,       /* COM scan direction (overridden by lcd_orient) */
+    0xC0,       /* COM scan direction: normal                                */
     0xD3, 0x60, /* display offset */
     0xDC, 0x00, /* display start line */
     0x21,       /* memory addressing mode */
     0x81, 0xFF, /* contrast */
-    0xA0,       /* segment remap (overridden by lcd_orient) */
+    0xA1,       /* segment remap: A1 + C0 reads upright in landscape with the
+                 * buttons on the left (HW probe page 9; SS used A0 portrait) */
     0xA4,       /* display follows RAM */
     0xA6,       /* not inverted */
     0xAD, 0x8A, /* DC-DC */
@@ -36,10 +40,34 @@ static const uint8_t m_init[] = {
     0xAF,       /* display on */
 };
 
+/* Clock out `n` bytes and return once the last one has left the shifter.
+ * TXD is double-buffered: keep two bytes queued, refill on every READY. */
+static void spi_write(const uint8_t *p, uint32_t n)
+{
+    NRF_SPI_Type *spi = NRF_SPI0;
+    uint32_t sent = 0;
+    spi->EVENTS_READY = 0;
+    spi->TXD = p[sent++];
+    if (sent < n) {
+        spi->TXD = p[sent++];
+    }
+    for (uint32_t done = 0; done < n; done++) {
+        while (spi->EVENTS_READY == 0) {
+        }
+        spi->EVENTS_READY = 0;
+        (void)spi->RXD; /* frees the RX slot that pairs with the next TXD */
+        if (sent < n) {
+            spi->TXD = p[sent++];
+        }
+    }
+}
+
 static void send_cmd(const uint8_t *cmds, uint8_t n)
 {
     nrf_gpio_pin_clear(PIN_LCD_DC);
-    APP_ERROR_CHECK(nrf_drv_spi_transfer(&m_spi, cmds, n, NULL, 0));
+    nrf_gpio_pin_clear(PIN_LCD_CS);
+    spi_write(cmds, n);
+    nrf_gpio_pin_set(PIN_LCD_CS);
 }
 
 void lcd_init(void)
@@ -66,26 +94,20 @@ void lcd_init(void)
 void lcd_flush(const uint8_t *fb)
 {
     uint8_t page[3] = {0xB0, 0x00, 0x10};
+    nrf_gpio_pin_clear(PIN_LCD_CS); /* one selection for the whole frame */
     for (uint8_t i = 0; i < 64; i++) {
         page[1] = i & 0x0F;
         page[2] = 0x10 | (i >> 4);
-        send_cmd(page, sizeof page);
+        nrf_gpio_pin_clear(PIN_LCD_DC); /* D/C is sampled per byte; spi_write */
+        spi_write(page, sizeof page);  /* returns only when the bus is idle   */
         nrf_gpio_pin_set(PIN_LCD_DC);
-        APP_ERROR_CHECK(nrf_drv_spi_transfer(&m_spi, fb + 16 * i, 16, NULL, 0));
+        spi_write(fb + 16 * i, 16);
     }
+    nrf_gpio_pin_set(PIN_LCD_CS);
 }
 
 void lcd_contrast(uint8_t level)
 {
     const uint8_t cmd[2] = {0x81, level};
-    send_cmd(cmd, sizeof cmd);
-}
-
-void lcd_orient(uint8_t mode)
-{
-    const uint8_t cmd[2] = {
-        (uint8_t)(0xA0 | (mode & 1)),          /* segment remap */
-        (uint8_t)((mode & 2) ? 0xC8 : 0xC0),   /* COM scan direction */
-    };
     send_cmd(cmd, sizeof cmd);
 }

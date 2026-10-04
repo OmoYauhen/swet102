@@ -2,7 +2,7 @@
 #
 #   make            build/swet102.hex (app only) + size report
 #   make check      size gates: fits the app region, no core::fmt in the image
-#   make dfu        signed OTA zip               (needs NRFUTIL)
+#   make dfu        signed OTA zip (needs NRFUTIL; SWET_PIN_CITY/SWET_PIN_SPORT or DEV_PINS=1)
 #   make full       bootloader + S130 + app + settings, for SWD   (needs NRFUTIL)
 #   make flash-full mass-erase and write the full image over SWD  (needs OPENOCD)
 #
@@ -38,6 +38,9 @@ SDK_SRC := \
   components/libraries/scheduler/app_scheduler.c \
   components/libraries/fifo/app_fifo.c \
   components/libraries/uart/app_uart_fifo.c \
+  components/libraries/fds/fds.c \
+  components/libraries/fstorage/fstorage.c \
+  components/libraries/crc16/crc16.c \
   components/drivers_nrf/common/nrf_drv_common.c \
   components/drivers_nrf/clock/nrf_drv_clock.c \
   components/drivers_nrf/spi_master/nrf_drv_spi.c \
@@ -69,6 +72,9 @@ SDK_INC := \
   components/libraries/scheduler \
   components/libraries/fifo \
   components/libraries/uart \
+  components/libraries/fds \
+  components/libraries/fstorage \
+  components/libraries/crc16 \
   components/libraries/log \
   components/libraries/log/src \
   components/libraries/experimental_section_vars \
@@ -94,7 +100,7 @@ LDFLAGS  := $(ARCH) -Tplatform/nrf51/swet102.ld -L$(SDK_ROOT)/components/toolcha
 PLATFORM_OBJ := $(PLATFORM_SRC:%.c=$(BUILD)/%.o)
 SDK_OBJ      := $(SDK_SRC:%.c=$(BUILD)/sdk/%.o) $(SDK_ASM:%.S=$(BUILD)/sdk/%.o)
 
-.PHONY: all check dfu full flash-full flash-app clean FORCE
+.PHONY: all check check-pins dfu full flash-full flash-app clean FORCE
 all: $(OUT).hex
 
 $(RUST_LIB): FORCE
@@ -133,8 +139,16 @@ check: $(OUT).elf
 	  echo "error: swet_fw::APP is not zero-initialised (not in .bss):"; $(NM) -S -C $< | grep "swet_fw::APP"; exit 1; fi
 	@echo "ok: App is zero-initialised (.bss)"
 
-dfu: $(OUT).hex
-	$(NRFUTIL) pkg generate --application $< --key-file $(KEYFILE) \
+# OTA packages are what goes on the bike: refuse the public dev PINs (1111/2222)
+# unless DEV_PINS=1 says it's a bench build on purpose.
+check-pins:
+ifndef DEV_PINS
+	@if [ -z "$$SWET_PIN_CITY" ] || [ -z "$$SWET_PIN_SPORT" ]; then \
+	  echo "error: set SWET_PIN_CITY and SWET_PIN_SPORT (4 digits each), or DEV_PINS=1 for a bench build"; exit 1; fi
+endif
+
+dfu: check-pins $(OUT).hex
+	$(NRFUTIL) pkg generate --application $(OUT).hex --key-file $(KEYFILE) \
 	  --application-version $(VERSION_NUM) --hw-version 51 --sd-req 0x87 $(OUT)-$(VERSION_NUM).zip
 
 $(BUILD)/settings.hex: $(OUT).hex
@@ -155,5 +169,9 @@ flash-app: $(BUILD)/settings.hex
 clean:
 	rm -rf $(BUILD)
 	cargo clean -p swet-fw --release --target thumbv6m-none-eabi
+
+# The SDK reaches sdk_config.h through -isystem headers, which -MMD doesn't
+# track; without this a config change leaves stale SDK objects.
+$(SDK_OBJ): platform/nrf51/sdk_config.h
 
 -include $(PLATFORM_OBJ:.o=.d) $(SDK_OBJ:.o=.d)
