@@ -935,7 +935,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
 | 4 | **GPREGRET DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | Write 0xB1 + reset, watch for `SW102_DFU` |
-| 5 | **SH1107 landscape remap** | which edge is the top | First flash in M1 |
+| 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0` → `DISPLAY_ORIENT = 1`. | — |
 | 6 | **Walk-assist keep-alive** | Does the stock controller time out PAS 06? | Hold walk for 30 s on the stand |
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
 | 8 | **Auto-connect in the field** | Phone background behavior varies by vendor | Ride with the app on your own phone |

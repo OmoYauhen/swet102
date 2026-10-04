@@ -34,6 +34,6 @@ pub const MOTOR_LINK_TIMEOUT_MS: u32 = 2000;
 pub const SPEED_LIMIT_AS_RPM: bool = true;
 
 // --- display ---
-/// SH1107 orientation used at boot: bit0 = segment remap, bit1 = COM scan.
-/// Unverified on hardware (TECH_DESIGN §16); the diagnostics screen can cycle it.
-pub const DISPLAY_ORIENT: u8 = 0;
+/// SH1107 orientation: bit0 = segment remap (A0/A1), bit1 = COM scan (C0/C8).
+/// `A1 C0` reads upright with the buttons on the left (HW probe, page 9).
+pub const DISPLAY_ORIENT: u8 = 1;

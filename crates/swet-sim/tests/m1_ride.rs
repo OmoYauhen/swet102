@@ -154,7 +154,11 @@ fn m_hold_opens_diagnostics_and_pwr_goes_back() {
     s.hold(Buttons::M, 1200);
     assert_eq!(s.app().screen(), Screen::Diag);
     s.click(Buttons::M);
-    assert_eq!(s.hal().orient, 1, "M cycles the display orientation");
+    assert_eq!(
+        s.hal().orient,
+        2,
+        "M cycles the display orientation (boots at 1)"
+    );
     s.click(Buttons::PWR);
     assert_eq!(s.app().screen(), Screen::Ride);
 }

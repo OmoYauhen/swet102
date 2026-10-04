@@ -62,7 +62,7 @@ impl<H: Hal> App<H> {
                 // set in init(): keeps the whole App zero-initialised (.bss, not .data)
                 speed_limit: 0,
             },
-            orient: config::DISPLAY_ORIENT,
+            orient: 0, // set in init(), see speed_limit
             last_buttons: Buttons(0),
         }
     }
@@ -70,6 +70,7 @@ impl<H: Hal> App<H> {
     pub fn init(&mut self, _now_ms: u32) {
         // Defaults until persistence (M3) loads the saved state here.
         self.state.speed_limit = config::CITY_LIMIT_KMH;
+        self.orient = config::DISPLAY_ORIENT;
         self.hal.display_orient(self.orient);
     }
 
