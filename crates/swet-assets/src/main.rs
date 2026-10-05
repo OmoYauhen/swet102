@@ -211,6 +211,28 @@ fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
     (Bitmap { w, h, px: px_out }, offsets)
 }
 
+/// The repo URL for the Firmware screen's QR code. Uppercase so the QR uses
+/// alphanumeric mode and fits version 2 (25×25); scheme, host and GitHub paths
+/// are case-insensitive.
+const REPO_QR: &str = "HTTPS://GITHUB.COM/OMOYAUHEN/SWET102";
+
+/// QR code as a bitmap, 1 = dark module, no quiet zone.
+fn qr_bitmap(data: &str) -> Bitmap {
+    use qrcode::{EcLevel, QrCode};
+    let code = QrCode::with_error_correction_level(data.as_bytes(), EcLevel::M).expect("QR fits");
+    let w = code.width();
+    assert_eq!(
+        w, 25,
+        "{data:?} must fit QR version 2 to stay 50 px at 2 px/module"
+    );
+    let px = code
+        .to_colors()
+        .iter()
+        .map(|c| *c == qrcode::Color::Dark)
+        .collect();
+    Bitmap { w, h: w, px }
+}
+
 const IMAGES: &[(&str, &str)] = &[("SPARKLES", "ss/sparkles.xbm")];
 
 fn bytes_lit(out: &mut String, bits: &[u8]) {
@@ -311,6 +333,20 @@ fn main() {
                 &preview_dir.join(format!("{}.png", name.to_lowercase())),
             );
         }
+    }
+
+    let qr = qr_bitmap(REPO_QR);
+    let (stride, bits) = qr.pack();
+    let _ = write!(
+        out,
+        "\n/// QR code for `{REPO_QR}` (version 2-M, 1 = dark module, no quiet zone).\n\
+         pub static QR_REPO: Image = Image {{\n    w: {},\n    h: {},\n    stride: {stride},\n    bits: &[",
+        qr.w, qr.h
+    );
+    bytes_lit(&mut out, &bits);
+    out.push_str("],\n};\n");
+    if preview {
+        write_png(&qr, &preview_dir.join("qr_repo.png"));
     }
 
     let dest = root.join("crates/swet-heart/src/gfx/assets.rs");

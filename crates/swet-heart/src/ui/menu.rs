@@ -3,7 +3,7 @@
 //! out. Also the confirm, BLE status and firmware screens it opens.
 
 use crate::config;
-use crate::gfx::assets::TEXT;
+use crate::gfx::assets::{QR_REPO, TEXT};
 use crate::gfx::{Frame, Mode, W, num};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -204,25 +204,34 @@ pub fn render_ble(f: &mut Frame, b: &BleInfo) {
     line(f, 48, &addr);
 }
 
+/// Version info on the left, a QR code to the GitHub repo on the right.
 pub fn render_firmware(f: &mut Frame) {
-    let title = b"Swet102";
-    f.text(
-        &TEXT,
-        title,
-        (W - TEXT.width(title, 1)) / 2,
-        1,
-        1,
-        Mode::Set,
-    );
-    let rows: [(&[u8], &[u8]); 3] = [
-        (b"VERSION ", config::VERSION.as_bytes()),
-        (b"BUILD ", config::BUILD_NUM.as_bytes()),
-        (b"GIT ", config::GIT_HASH.as_bytes()),
+    f.text(&TEXT, b"Swet102", 2, 1, 1, Mode::Set);
+    let rows: [(&[u8], i32); 5] = [
+        (config::VERSION.as_bytes(), 20),
+        (b"BUILD", 31),
+        (config::BUILD_NUM.as_bytes(), 38),
+        (b"GIT", 49),
+        (config::GIT_HASH.as_bytes(), 56),
     ];
-    for (i, (k, v)) in rows.iter().enumerate() {
-        let y = 22 + i as i32 * 10;
-        let x = f.text3x5(4, y, k, 1, Mode::Set);
-        f.text3x5(x, y, v, 1, Mode::Set);
+    for (s, y) in rows {
+        f.text3x5(2, y, s, 1, Mode::Set);
+    }
+
+    // QR: dark modules on a lit square, 2 px per module; the lit margin is the
+    // quiet zone (7 px = 3.5 modules) scanners need around the code.
+    const QR_X: i32 = W - 64;
+    f.fill_rect(QR_X, 0, 64, 64, Mode::Set);
+    let (qw, qh) = (i32::from(QR_REPO.w), i32::from(QR_REPO.h));
+    let (x0, y0) = (QR_X + (64 - 2 * qw) / 2, (64 - 2 * qh) / 2);
+    let stride = usize::from(QR_REPO.stride);
+    for y in 0..qh {
+        for x in 0..qw {
+            let byte = QR_REPO.bits[y as usize * stride + (x >> 3) as usize];
+            if byte & (1 << (x & 7)) != 0 {
+                f.fill_rect(x0 + 2 * x, y0 + 2 * y, 2, 2, Mode::Clear);
+            }
+        }
     }
 }
 
