@@ -30,7 +30,10 @@ pub struct SimHal {
     pub store_inflight: Option<([u8; STORE_LEN], u64)>,
     pub store_writes: u32,
     pub ble: BleState,
+    /// Notifications a subscribed phone received.
     pub ble_notifies: Vec<(BleChannel, Vec<u8>)>,
+    /// What a read of each characteristic returns (telemetry, command, trips).
+    pub ble_values: [Vec<u8>; 3],
     pub powered_off: bool,
     pub dfu_requested: bool,
 }
@@ -72,7 +75,20 @@ impl Hal for SimHal {
         self.ble
     }
     fn ble_notify(&mut self, ch: BleChannel, data: &[u8]) {
-        self.ble_notifies.push((ch, data.to_vec()));
+        assert!(
+            data.len() <= 20,
+            "{ch:?}: {} bytes > ATT payload",
+            data.len()
+        );
+        self.ble_values[ch as usize] = data.to_vec();
+        let sub = match ch {
+            BleChannel::Telemetry => BleState::TELEMETRY_SUB,
+            BleChannel::Command => BleState::COMMAND_SUB,
+            BleChannel::Trips => BleState::TRIPS_SUB,
+        };
+        if self.ble.0 & BleState::CONNECTED != 0 && self.ble.0 & sub != 0 {
+            self.ble_notifies.push((ch, data.to_vec()));
+        }
     }
     fn ble_address(&self) -> [u8; 6] {
         [0xC0, 0xFF, 0xEE, 0x10, 0x21, 0x02]
@@ -197,6 +213,35 @@ impl Sim {
         self.hold(b, 60);
         self.run_ms(100);
         self.hold(b, 60);
+    }
+
+    /// A phone connects and subscribes to every characteristic.
+    pub fn phone_connect(&mut self) {
+        self.hal_mut().ble = BleState(
+            BleState::CONNECTED
+                | BleState::TELEMETRY_SUB
+                | BleState::COMMAND_SUB
+                | BleState::TRIPS_SUB,
+        );
+    }
+
+    pub fn phone_disconnect(&mut self) {
+        self.hal_mut().ble = BleState(0);
+    }
+
+    /// The phone writes the control characteristic.
+    pub fn phone_write_control(&mut self, data: &[u8]) {
+        self.app.ble_control(data);
+    }
+
+    /// Notifications the phone got on `ch`, oldest first.
+    pub fn notified(&self, ch: BleChannel) -> Vec<Vec<u8>> {
+        self.hal()
+            .ble_notifies
+            .iter()
+            .filter(|(c, _)| *c == ch)
+            .map(|(_, d)| d.clone())
+            .collect()
     }
 
     pub fn app_mut(&mut self) -> &mut App<SimHal> {

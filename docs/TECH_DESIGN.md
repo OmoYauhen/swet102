@@ -110,8 +110,8 @@ pub trait Hal {
     fn store_busy(&self) -> bool;
 
     // BLE
-    fn ble_state(&self) -> BleState;                   // connected, telemetry_sub, command_sub
-    fn ble_notify(&mut self, ch: BleChannel, data: &[u8]);
+    fn ble_state(&self) -> BleState;                   // connected, telemetry/command/trips subscribed
+    fn ble_notify(&mut self, ch: BleChannel, data: &[u8]); // set the value; notify if subscribed
     fn ble_address(&self) -> [u8; 6];
 
     // system
@@ -138,7 +138,7 @@ uint8_t  hal_uart_take_errors(void);
 bool     hal_store_load(uint8_t *buf, uint16_t len);
 void     hal_store_save(const uint8_t *buf, uint16_t len);
 bool     hal_store_busy(void);
-uint8_t  hal_ble_state(void);                             // bit0 conn, bit1 tel sub, bit2 cmd sub
+uint8_t  hal_ble_state(void);                             // bit0 conn, bit1 tel sub, bit2 cmd sub, bit3 trips sub
 void     hal_ble_notify(uint8_t ch, const uint8_t *buf, uint8_t len);
 void     hal_ble_address(uint8_t out[6]);
 void     hal_power_off(void);
@@ -152,6 +152,7 @@ These are Rust functions that C calls, exported by `swet-fw` with `#[no_mangle]`
 void swet_init(uint32_t now_ms);
 void swet_tick(uint32_t now_ms);                         // every 20 ms, main loop only
 void swet_ble_control(const uint8_t *data, uint8_t len); // phone wrote the control char
+uint8_t swet_version(uint8_t *out, uint8_t cap);          // version string for DIS; pure, callable before init
 ```
 
 **Rules for the boundary:**
@@ -671,7 +672,7 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | 0 | version | u8 | 2 |
 | 1 | speed_x10 | u16 | km/h × 10 |
 | 3 | power_w | u16 | |
-| 5 | soc | u8 | % |
+| 5 | soc | u8 | %; 0xFF before the first reading |
 | 6 | pas | u8 | 0–9 |
 | 7 | speed_limit | u8 | km/h; > 25 = sport |
 | 8 | flags | u8 | bit0 lights, bit1 walk, bit2 motor link up |
@@ -679,8 +680,9 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | 10 | odo_hm | u32 | 100 m units |
 
 **Trips**: one **18-byte record per notification**, identified by `id`. All four records
-are sent one after another every 5 s while subscribed, and the affected one straight
-after a reset. Both characteristics fit the default 20-byte ATT payload, so no MTU
+are sent one after another every 5 s while subscribed (one per 20 ms tick, so a burst
+can't run the SoftDevice out of TX buffers), and the affected one straight after a
+reset. Both characteristics fit the default 20-byte ATT payload, so no MTU
 exchange is needed (S130 on nRF51 is safest at the default MTU).
 
 | Offset | Field | Type | Notes |
@@ -693,7 +695,16 @@ exchange is needed (S130 on nRF51 is safest at the default MTU).
 | 10 | mah | u32 | charge used; 0 for odometer |
 | 14 | moving_s | u32 | 0 for odometer |
 
-**Command**: `[seq, code]`, notified once per press. `seq` increments per command, so the app can drop duplicates.
+**Publishing** (`hal_ble_notify`): the C side sets the characteristic value (what a
+read returns) and notifies it if the phone has enabled notifications on that
+characteristic. The core publishes telemetry and trips whenever a phone is
+connected, and everything goes out on the first tick after a connect. A
+notification that finds no free SoftDevice buffer is dropped and counted
+(`Diag::BleDropped`, shown on the Bluetooth menu screen).
+
+**Command**: `[seq, code]`, notified once per press, only while the phone is subscribed
+to the command characteristic (otherwise the press is dropped, and Player/Gate are drawn
+dithered). `seq` increments per command, so the app can drop duplicates.
 
 | Code | Command |
 |---|---|
@@ -717,7 +728,9 @@ own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
   Verify that casainho's bootloader honours GPREGRET (§16). If it doesn't, the menu
   item shows "hold M+PWR 8 s" instead.
 - **From the phone:** writing `"DFU!"` to the control characteristic does the same.
-  It's only accepted after the wheel has been stopped for 5 s.
+  It's only accepted after the wheel has been stopped for 5 s (`DFU_STOPPED_MS`;
+  "stopped" includes no motor link). Any other write is ignored.
+  `tools/ble-phone.py --dfu` does this from a PC.
 - **Security:** unauthenticated, and the DFU signing key is public
   (`prebuilt/private.key`). That's accepted, consistent with product §9.
 
@@ -809,7 +822,8 @@ is powered off and started with a long PWR press (soft power latch).
 | R / F | SoC ± 5 % |
 | 1..9, 0 | inject error code / clear |
 | L | toggle motor link |
-| B | toggle "phone connected + subscribed" |
+| C | toggle "phone connected + subscribed" (B is braking) |
+| U | the phone writes `DFU!` to the control characteristic |
 | F12 | PNG screenshot |
 | F11 | GIF recording |
 
@@ -998,6 +1012,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
 | 8 | **Auto-connect in the field** | Phone background behavior varies by vendor | Ride with the app on your own phone |
 | 9 | **DFU security** | public key + unauthenticated DFU control | Accepted |
+| 10 | **M5 BLE on hardware** | GATT table must fit S130's default attribute table (else a reset loop at boot); advertising/notify untested on the chip | Boot the M5 build; `tools/ble-phone.py` sees telemetry, trips and commands |
 
 ---
 
@@ -1041,3 +1056,8 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | M4: distances saved every 1 km and after 5 s stopped with ≥ 100 m unsaved; battery-trip reset, trip reset and DFU save at once |
 | 2026-10-05 | M4: menu (Reset trip, Bluetooth, Diagnostics, Firmware, Update) replaces M-hold diagnostics; Firmware screen shows `VERSION_NUM` (Makefile → `SWET_BUILD_NUM`) and the git commit |
 | 2026-10-05 | Future (after M6): signed one-time LNURL-withdraw links ("Get Money", per-km rewards), HMAC + flash counter, QR generated on the MCU, own LNbits server; sketch in §15a |
+| 2026-10-05 | M5: pages PAS → Lights → Player → Gate. Lights: LEFT off / RIGHT on, bulb outline/filled + ON/OFF; display contrast 0xFF with lights off, 0x30 with lights on (`CONTRAST_DAY/NIGHT`); lights not persisted |
+| 2026-10-05 | M5: Player: LEFT click vol−, hold prev; RIGHT click vol+ (after the 350 ms window), hold next, double play/pause. Gate: LEFT A, RIGHT B, instant. Without a command subscription the glyph is dithered and presses are dropped |
+| 2026-10-05 | M5: `blep.rs` owns payloads and cadence; `hal_ble_notify` = set value + notify if subscribed; `BleState` bit3 = trips subscribed; trips records go one per tick; soc 0xFF = unknown |
+| 2026-10-05 | M5: `ble.c`: own advertising (fast 100 ms × 30 s → slow 1 s unlimited, fast again after a disconnect), flags + name in adv data, service UUID in scan response; `ble_conn_params` asks once after 5 s, never disconnects; DIS firmware rev from `swet_version()` (Rust) |
+| 2026-10-05 | M5: walk assist ends on LEFT release even when an M click switched the page during the hold |

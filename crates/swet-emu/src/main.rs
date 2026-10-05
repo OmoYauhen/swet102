@@ -57,7 +57,7 @@ const DISP_H: i32 = H * SCALE as i32;
 const PANEL_X: i32 = DISP_X + DISP_W + 24;
 const PANEL_W: i32 = 470;
 const WIN_W: i32 = PANEL_X + PANEL_W + MARGIN;
-const WIN_H: i32 = 700;
+const WIN_H: i32 = 740;
 const ROW: i32 = 32;
 
 /// Keys that drive the display's buttons.
@@ -101,6 +101,7 @@ fn main() {
     let mut shot = 0u32;
     // the motor only knows whole rpm; keep the km/h target here so ±1 steps never stall
     let mut kmh = 0u32;
+    let mut commands_seen = 0u32;
 
     while window.is_open() && !sim.hal().powered_off && !sim.hal().dfu_requested {
         let mut buttons = 0;
@@ -153,6 +154,16 @@ fn main() {
                 };
             }
         }
+        if once(Key::C) {
+            if sim.hal().ble.0 == 0 {
+                sim.phone_connect();
+            } else {
+                sim.phone_disconnect();
+            }
+        }
+        if once(Key::U) && sim.hal().ble.0 != 0 {
+            sim.phone_write_control(swet_heart::blep::CONTROL_DFU);
+        }
         if once(Key::F12) {
             let path = std::path::PathBuf::from(format!("swet102-{shot:03}.png"));
             match swet_sim::write_png(&sim.screen(), &path, SCALE as u32) {
@@ -168,6 +179,11 @@ fn main() {
             sim.tick();
         }
 
+        let sent = sim.app().blep().commands;
+        if sent != commands_seen {
+            commands_seen = sent;
+            eprintln!("phone <- command {:#04x}", sim.app().blep().last_command);
+        }
         if sim.hal().store != persisted {
             persisted = sim.hal().store;
             if let Some(bytes) = persisted
@@ -356,6 +372,23 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         Power::Dfu { .. } => "rebooting to DFU",
     };
     row(c, &mut y, "Power", power);
+    let phone = if sim.hal().ble.0 == 0 {
+        "not connected".to_string()
+    } else {
+        let b = app.blep();
+        let last = match b.last_command {
+            0x01 => "volume +",
+            0x02 => "volume -",
+            0x03 => "next track",
+            0x04 => "previous track",
+            0x05 => "play / pause",
+            0x10 => "gate A",
+            0x11 => "gate B",
+            _ => "-",
+        };
+        format!("subscribed, {} cmds (last: {last})", b.commands)
+    };
+    row(c, &mut y, "Phone", &phone);
     let writes = sim.hal().store_writes;
     let plural = if writes == 1 { "" } else { "s" };
     row(c, &mut y, "Flash", &format!("{writes} write{plural}"));
@@ -367,6 +400,7 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         "F12: PNG of the display     --fresh: start with empty flash",
         "Dev-build PINs: city 1111, sport 2222",
         "Motor: B brake, X error 21, L link, W/S speed, E/D current, R/F battery",
+        "Phone: C connect / disconnect (subscribed to everything), U sends DFU!",
     ]
     .iter()
     .enumerate()
@@ -391,6 +425,7 @@ fn oled(c: &mut Canvas, frame: &swet_heart::Frame) {
 fn snapshot(path: &str, w: usize, h: usize) {
     let mut sim = Sim::new();
     let kmh = 27;
+    sim.phone_connect();
     sim.motor().set_speed_kmh(kmh);
     sim.motor().current_x2 = 24;
     sim.boot_to_ride();

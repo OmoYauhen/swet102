@@ -158,6 +158,10 @@ pub struct BleInfo {
     pub commands: bool,
     /// Little-endian, as the SoftDevice reports it.
     pub address: [u8; 6],
+    /// Commands sent to the phone since power-on.
+    pub sent: u32,
+    /// Notifications the stack had no buffer for.
+    pub dropped: u32,
 }
 
 pub fn render_ble(f: &mut Frame, b: &BleInfo) {
@@ -200,8 +204,18 @@ pub fn render_ble(f: &mut Frame, b: &BleInfo) {
             addr[i * 3 + 2] = b':';
         }
     }
-    line(f, 40, b"ADDRESS:");
-    line(f, 48, &addr);
+    line(f, 39, b"ADDRESS:");
+    line(f, 46, &addr);
+    let (mut a, mut d) = ([0u8; 10], [0u8; 10]);
+    let mut x = 4;
+    for s in [
+        b"SENT ".as_slice(),
+        num::u32_dec(b.sent, &mut a),
+        b"  DROPPED ",
+        num::u32_dec(b.dropped, &mut d),
+    ] {
+        x = f.text3x5(x, 56, s, 1, Mode::Set);
+    }
 }
 
 /// A QR code to the GitHub repo on the left, version info on the right.

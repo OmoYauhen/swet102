@@ -29,6 +29,7 @@ impl BleState {
     pub const CONNECTED: u8 = 1;
     pub const TELEMETRY_SUB: u8 = 2;
     pub const COMMAND_SUB: u8 = 4;
+    pub const TRIPS_SUB: u8 = 8;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -64,6 +65,8 @@ pub enum Diag {
     FlushMaxUs = 8,
     /// Flash writes that failed since boot.
     StoreErrors = 9,
+    /// BLE notifications the SoftDevice had no buffer for (dropped).
+    BleDropped = 10,
 }
 
 pub trait Hal {
@@ -84,6 +87,8 @@ pub trait Hal {
 
     // BLE
     fn ble_state(&self) -> BleState;
+    /// Publish a new value: it becomes what a read returns, and a phone
+    /// subscribed to `ch` also gets it as a notification (≤ 20 bytes).
     fn ble_notify(&mut self, ch: BleChannel, data: &[u8]);
     fn ble_address(&self) -> [u8; 6];
 

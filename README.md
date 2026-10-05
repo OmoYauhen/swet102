@@ -6,9 +6,10 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M4 — riding screen, motor bus, error screens, saved settings, lock
-with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
-message, menu. BLE comes in M5, animations in M6.
+**Status:** M5 — riding screen with PAS, Lights, Player and Gate pages, motor bus,
+error screens, saved settings, lock with city/sport PINs, auto power-off, trips
+with max/avg/Ah, battery-trip message, menu, BLE (telemetry, trips, phone
+commands, DFU from the phone). Animations come in M6.
 
 ## Layout
 
@@ -54,17 +55,32 @@ state. Button and key chips light up while held.
 | B | braking on / off (status 03) |
 | X | motor error 21 on / off |
 | L | motor link on / off |
+| C | phone connected + subscribed / gone |
+| U | the phone writes `DFU!` (needs a phone, wheel stopped 5 s) |
 | F12 | PNG of the display |
 
 `--fresh` starts with empty flash (otherwise `emu-store.bin` is reused);
 `--snapshot=FILE.png` renders a short scripted ride to a PNG without a window.
 
-## Using it (M4)
+## Using it (M5)
+
+The tile on the left is the **page**; LEFT / RIGHT act on it. M click goes to
+the next page (PAS → Lights → Player → Gate), PWR click jumps back to PAS.
+
+| Page | LEFT | RIGHT |
+|---|---|---|
+| PAS (number) | PAS − (hold at 0: walk assist, tile shows ↑) | PAS + (0–9) |
+| Lights (bulb) | lights off | lights on; the screen dims while they're on |
+| Player (note) | click: volume −, hold: previous track | click: volume +, hold: next track, double-click: play / pause |
+| Gate (key) | gate A | gate B |
+
+Player and Gate send commands to the phone over BLE. Without a phone subscribed
+to commands their glyph is dithered and LEFT / RIGHT do nothing.
 
 | Gesture | Does |
 |---|---|
-| RIGHT / LEFT | PAS + / − (0–9) |
-| hold LEFT at PAS 0 | walk assist while held (tile shows ↑) |
+| M click | next page |
+| PWR click | back to the PAS page |
 | M double-click | next info view: speed → power → TRIP → BAT → RIDE → ODO |
 | M hold | menu (below) |
 | PWR hold | power off (settings are saved first) |
@@ -76,6 +92,19 @@ The **city PIN** unlocks with a 25 km/h limit, the **sport PIN** with 99 km/h
 (a lightning bolt in the battery icon). PAS, mode and lock survive power-off;
 the display switches itself off after 5 minutes without movement, motor current
 or buttons.
+
+## Bluetooth
+
+The display advertises as `swet102` for as long as it's on (fast for 30 s after
+power-on or a disconnect, then once a second). Phones connect without pairing.
+The GATT service (`8f030001-da4c-453d-a163-41a592a0e9fd`) has telemetry (1 Hz),
+trips (every 5 s), commands (one notification per Player/Gate press) and a
+control characteristic: writing `DFU!` reboots into the bootloader once the
+wheel has stood still for 5 s. Byte layouts: TECH_DESIGN §9.4.
+
+There's no phone app yet. `tools/ble-phone.py` stands in for it from a PC with
+Bluetooth: it connects, subscribes to everything and prints what the display
+sends (`--dfu` also writes `DFU!`).
 
 ## Flashing
 
@@ -106,7 +135,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Item | Does |
 |---|---|
 | Reset trip | zeroes the manual trip (asks first) |
-| Bluetooth | phone connected?, commands on?, the display's BLE address |
+| Bluetooth | phone connected?, commands on?, the display's BLE address, commands sent / notifications dropped |
 | Diagnostics | the screen below |
 | Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
 | Update (DFU) | saves, then reboots into the bootloader's DFU mode (asks first) |

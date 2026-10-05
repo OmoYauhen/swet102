@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include "ble.h"
+
 /* lcd.c */
 void lcd_init(void);
 void lcd_flush(const uint8_t *fb);
@@ -13,6 +15,10 @@ void lcd_contrast(uint8_t level);
 
 /* hal.c */
 void hal_init(void);
+
+/* ble.c */
+void ble_init(void);
+void ble_on_evt(ble_evt_t *evt);
 
 /* store.c */
 void store_init(void);
@@ -30,6 +36,7 @@ struct platform_diag {
     uint32_t flush_avg_us;
     uint32_t flush_max_us;
     uint32_t store_errors;
+    uint32_t ble_dropped;
 };
 extern struct platform_diag g_diag;
 

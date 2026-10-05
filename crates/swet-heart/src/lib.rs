@@ -3,6 +3,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+pub mod blep;
 pub mod config;
 pub mod gfx;
 pub mod hal;
@@ -15,6 +16,7 @@ pub mod ui;
 pub use gfx::Frame;
 pub use hal::{BleChannel, BleState, Buttons, Diag, Hal, STORE_LEN};
 
+use blep::{Blep, Command, Telemetry, TripId, Trips};
 use input::{Btn, Event, Gesture, Input};
 use motor::{Motor, codec};
 use rides::{Rides, Sample};
@@ -92,6 +94,13 @@ pub struct App<H: Hal> {
     /// (the SPI flush is the most expensive thing on this chip, TECH_DESIGN §4.3).
     sent: Frame,
     sent_valid: bool,
+    blep: Blep,
+    /// Contrast last sent to the display; 0 = not yet (the App starts zeroed).
+    contrast: u8,
+    /// Time of the last tick, for calls from outside `tick()` (BLE control).
+    now: u32,
+    /// Last tick with the wheel turning.
+    last_moving: u32,
 }
 
 impl<H: Hal> App<H> {
@@ -142,6 +151,10 @@ impl<H: Hal> App<H> {
             popups: Popups::new(),
             sent: Frame::new(),
             sent_valid: false,
+            blep: Blep::new(),
+            contrast: 0,
+            now: 0,
+            last_moving: 0,
         }
     }
 
@@ -162,11 +175,14 @@ impl<H: Hal> App<H> {
             self.stack.reset(Screen::Pin);
         }
         self.last_activity = now;
+        self.last_moving = now;
+        self.now = now;
         self.motor.walk_keepalive_ms = config::WALK_KEEPALIVE_MS;
     }
 
     /// Called every 20 ms from the main loop only. Never blocks (TECH_DESIGN §4.4).
     pub fn tick(&mut self, now: u32) {
+        self.now = now;
         // 1. input (ignored once power-off has started)
         let raw = self.hal.buttons();
         self.last_buttons = raw;
@@ -192,6 +208,9 @@ impl<H: Hal> App<H> {
         self.motor.set_speed_limit_kmh(self.state.speed_limit);
         self.motor.step(&mut self.hal, now);
         self.ride_step(now);
+        if self.motor.values.rpm.is_some_and(|r| r > 0) {
+            self.last_moving = now;
+        }
         let fault = self.fault(now);
         self.popups.update(fault, now);
 
@@ -206,7 +225,22 @@ impl<H: Hal> App<H> {
         self.saver.step(&mut self.hal, &rec, now);
         self.power_step(now);
 
-        // 4. render, and flush only if something changed
+        // 4. phone
+        let (tel, trips) = (self.telemetry(now), self.trips());
+        self.blep.step(&mut self.hal, now, &tel, &trips);
+
+        // 5. screen brightness follows the lights (PRODUCT §3.1)
+        let contrast = if self.state.lights {
+            config::CONTRAST_NIGHT
+        } else {
+            config::CONTRAST_DAY
+        };
+        if self.contrast != contrast {
+            self.contrast = contrast;
+            self.hal.display_contrast(contrast);
+        }
+
+        // 6. render, and flush only if something changed
         let model = self.model();
         let diag = self.diag_data();
         let overlay = match self.power {
@@ -231,6 +265,40 @@ impl<H: Hal> App<H> {
             self.hal.display_flush(&self.frame);
             self.sent.clone_from(&self.frame);
             self.sent_valid = true;
+        }
+    }
+
+    fn telemetry(&self, now: u32) -> Telemetry {
+        let m = self.model();
+        Telemetry {
+            speed_x10: m.speed_x10.unwrap_or(0),
+            power_w: m.power_w.unwrap_or(0),
+            soc: m.soc.unwrap_or(blep::SOC_UNKNOWN),
+            pas: self.state.pas,
+            speed_limit: self.state.speed_limit,
+            lights: self.state.lights,
+            walk: self.state.walk,
+            link_up: m.link_up,
+            error: match self.fault(now) {
+                None => 0,
+                Some(Fault::Code(c)) => c,
+                Some(Fault::LinkLost) => blep::ERROR_LINK_LOST,
+            },
+            odo_m: self.rides.odo_m,
+        }
+    }
+
+    fn trips(&self) -> Trips {
+        let r = &self.rides;
+        Trips {
+            trip: r.trip,
+            batt: r.batt,
+            ride: r.ride,
+            odo: rides::Trip {
+                m: r.odo_m,
+                max_x10: r.odo_max_x10,
+                ..rides::Trip::ZERO
+            },
         }
     }
 
@@ -269,6 +337,7 @@ impl<H: Hal> App<H> {
         });
         if let Some(km_x10) = out.battery_trip_done {
             self.popups.battery_trip(km_x10);
+            self.blep.trip_changed(TripId::Battery);
             self.saver.now(now);
             self.rides.saved();
         } else if out.save {
@@ -283,6 +352,8 @@ impl<H: Hal> App<H> {
             connected: s & BleState::CONNECTED != 0,
             commands: s & BleState::COMMAND_SUB != 0,
             address: self.hal.ble_address(),
+            sent: self.blep.commands,
+            dropped: self.hal.diag(Diag::BleDropped),
         }
     }
 
@@ -407,6 +478,7 @@ impl<H: Hal> App<H> {
                     match c {
                         Confirm::ResetTrip => {
                             self.rides.reset_trip();
+                            self.blep.trip_changed(TripId::Trip);
                             self.saver.now(now);
                             self.menu.show_done(now);
                         }
@@ -459,14 +531,47 @@ impl<H: Hal> App<H> {
     fn page_event(&mut self, ev: Event) {
         use Gesture::*;
         let s = &mut self.state;
-        match self.ride.page {
-            Page::Pas => match (ev.btn, ev.g) {
-                (Btn::Left, Click) => s.pas = s.pas.saturating_sub(1),
-                (Btn::Right, Click) => s.pas = (s.pas + 1).min(config::PAS_MAX),
-                (Btn::Left, Hold) if s.pas == 0 => s.walk = true,
-                (Btn::Left, HoldEnd) => s.walk = false,
-                _ => {}
+        // Walk assist ends with its hold whatever page is showing by then
+        // (an M click during the hold switches the page under it).
+        if (ev.btn, ev.g) == (Btn::Left, HoldEnd) && s.walk {
+            s.walk = false;
+            return;
+        }
+        let command = match self.ride.page {
+            Page::Pas => {
+                match (ev.btn, ev.g) {
+                    (Btn::Left, Click) => s.pas = s.pas.saturating_sub(1),
+                    (Btn::Right, Click) => s.pas = (s.pas + 1).min(config::PAS_MAX),
+                    (Btn::Left, Hold) if s.pas == 0 => s.walk = true,
+                    _ => {}
+                }
+                None
+            }
+            Page::Lights => {
+                match (ev.btn, ev.g) {
+                    (Btn::Left, Click) => s.lights = false,
+                    (Btn::Right, Click) => s.lights = true,
+                    _ => {}
+                }
+                None
+            }
+            Page::Player => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => Some(Command::VolumeDown),
+                (Btn::Left, Hold) => Some(Command::PrevTrack),
+                (Btn::Right, Click) => Some(Command::VolumeUp),
+                (Btn::Right, Hold) => Some(Command::NextTrack),
+                (Btn::Right, Double) => Some(Command::PlayPause),
+                _ => None,
             },
+            Page::Gate => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => Some(Command::GateA),
+                (Btn::Right, Click) => Some(Command::GateB),
+                _ => None,
+            },
+        };
+        // dropped when no phone listens: fire-and-forget (PRODUCT §9)
+        if let Some(c) = command {
+            self.blep.command(&mut self.hal, c);
         }
     }
 
@@ -482,6 +587,8 @@ impl<H: Hal> App<H> {
             pas: self.state.pas,
             walk: self.state.walk,
             sport: self.state.is_sport(),
+            lights: self.state.lights,
+            commands: self.hal.ble_state().0 & BleState::COMMAND_SUB != 0,
             trip: self.rides.trip,
             batt: self.rides.batt,
             ride: self.rides.ride,
@@ -511,7 +618,20 @@ impl<H: Hal> App<H> {
     }
 
     /// The phone wrote the control characteristic (TECH_DESIGN §9.5).
-    pub fn ble_control(&mut self, _data: &[u8]) {}
+    /// `"DFU!"` saves and reboots into the bootloader's DFU mode, like the
+    /// menu item, but only once the wheel has stood still for
+    /// `DFU_STOPPED_MS`: assist stops until the display is back. Anything
+    /// else is ignored.
+    pub fn ble_control(&mut self, data: &[u8]) {
+        let now = self.now;
+        if data == blep::CONTROL_DFU
+            && self.power == Power::On
+            && now.wrapping_sub(self.last_moving) >= config::DFU_STOPPED_MS
+        {
+            self.saver.now(now);
+            self.power = Power::Dfu { since: now };
+        }
+    }
 
     // --- read-only accessors for the simulator and tests ---
 
@@ -549,6 +669,10 @@ impl<H: Hal> App<H> {
 
     pub fn view(&self) -> View {
         self.ride.view
+    }
+
+    pub fn blep(&self) -> &Blep {
+        &self.blep
     }
 
     pub fn motor(&self) -> &Motor {
