@@ -108,7 +108,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Reset trip | zeroes the manual trip (asks first) |
 | Bluetooth | phone connected?, commands on?, the display's BLE address |
 | Diagnostics | the screen below |
-| Firmware | version, build number (`VERSION_NUM`), git commit |
+| Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
 | Update (DFU) | saves, then reboots into the bootloader's DFU mode (asks first) |
 
 **Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
