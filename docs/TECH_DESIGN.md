@@ -924,6 +924,64 @@ The new GATT service and advertising policy (§9) are C, but written fresh.
 
 ---
 
+## 15a. Future: Lightning withdraw links (after M6)
+
+Technical sketch for PRODUCT §11a ("Get Money", "the bike pays per km"). Not
+scheduled; written down so the design is ready.
+
+**Principle:** the display never holds money. It produces a **signed, one-time
+LNURL-withdraw link**; a small server you run checks it and pays from its own
+wallet (e.g. LNbits).
+
+### Link
+
+```
+lnurlw://<short-host>/w/<payload>          (LUD-17 scheme; bech32 "LNURL1…" as an option)
+payload = base64url( amount_sat u16 | counter u32 | kind u8 | mac[8] )   = 15 B → 20 chars
+mac     = HMAC-SHA256(secret, amount | counter | kind)[0..8]
+kind    = 1 "Get Money", 2 "per km"
+```
+
+- **Short host** (e.g. `ln.pet.example`) keeps the whole link ≈ 45 bytes: QR
+  version 3-L, 29×29, the same size as the repo QR, so it fits at 2 px/module.
+  A longer URL means version 4+ and 1 px/module, which is hard to scan off the OLED.
+- **Secret:** 32 bytes from `SWET_LN_SECRET` at build time, like the PINs; never
+  in the repo. The server holds the same secret.
+- **One-time:** `counter` is a u32 in the store record (reserved bytes 42..46).
+  It is incremented **and saved** before the QR is shown. The server pays only if
+  `counter` > the last counter it paid, so photos can't be replayed and showing a
+  new link silently voids any older unclaimed one.
+
+### Display side
+
+- **"Get Money":** menu item → 3-digit amount picker (the PIN picker generalised to
+  N digits) → QR screen (PWR back). Amounts 1–999 sats.
+- **Per km:** a reward counter (meters since the last claim) in the record; the
+  amount is `km × rate` (rate at build time), and claiming resets the counter.
+- **QR on the MCU:** `qrcodegen-no-heap` (no_std, no alloc) generates the code at
+  runtime, unlike the repo QR, which is precomputed.
+- **Crypto:** `hmac` + `sha2` (no_std). Expected cost for QR + HMAC + base64 is
+  ~6–8 KB flash and ~1 KB stack; there is room (115 KB region, 33 KB used).
+
+### Server side
+
+- `GET /w/<payload>`: check the MAC, `counter` > last paid, `amount` ≤ per-link
+  limit, daily total ≤ limit. Answer with a LUD-03 `withdrawRequest`
+  (`minWithdrawable = maxWithdrawable = amount × 1000` msat, a `k1`, a callback).
+- Callback: pay the wallet's invoice through the LNbits API, then store `counter`.
+- Small enough to be one script or an LNbits extension.
+
+### Risks
+
+- **Secret in flash:** anyone who dumps the firmware over SWD can mint links. The
+  nRF51 has readback protection, but turning it on means mass-erasing to reflash.
+  Mitigation: tiny amounts and server-side daily limits.
+- **Scanning:** a version 3 QR at 2 px/module has only a 1.5-module quiet zone;
+  check the repo QR on real phones first (PR #8).
+- **Wallet support:** `lnurlw://` (LUD-17) isn't universal; offer the bech32
+  `LNURL1…` form if a wallet doesn't take it (it is longer, but uppercase
+  alphanumeric).
+
 ## 16. Risks and hardware checks
 
 Most of these are answered by a **probe build of Swang Stodva**, specified in
@@ -982,3 +1040,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | M4: trips integrate over elapsed time (rides.rs); max needs two readings within 5 km/h; avg over moving time; mAh from current × dt; battery trip after 3 identical SoC readings, first reading initialises silently (`soc_min_valid`, record byte 5) |
 | 2026-10-05 | M4: distances saved every 1 km and after 5 s stopped with ≥ 100 m unsaved; battery-trip reset, trip reset and DFU save at once |
 | 2026-10-05 | M4: menu (Reset trip, Bluetooth, Diagnostics, Firmware, Update) replaces M-hold diagnostics; Firmware screen shows `VERSION_NUM` (Makefile → `SWET_BUILD_NUM`) and the git commit |
+| 2026-10-05 | Future (after M6): signed one-time LNURL-withdraw links ("Get Money", per-km rewards), HMAC + flash counter, QR generated on the MCU, own LNbits server; sketch in §15a |
