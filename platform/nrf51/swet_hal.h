@@ -30,3 +30,6 @@ void     hal_panic(void) __attribute__((noreturn));
 void swet_init(uint32_t now_ms);
 void swet_tick(uint32_t now_ms);
 void swet_ble_control(const uint8_t *data, uint8_t len);
+/* Copies the version string (no NUL) into out; returns its length. Pure: may
+ * be called before swet_init(). */
+uint8_t swet_version(uint8_t *out, uint8_t cap);

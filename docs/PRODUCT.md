@@ -604,3 +604,4 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-04 | Every trip (manual, battery, ride) tracks max speed and average speed over moving time |
 | 2026-10-04 | Odometer keeps an all-time max speed; every trip also tracks charge used (Ah) from integrated motor current |
 | 2026-10-04 | Motor polling stays on fixed 100 ms slots (event-driven polling considered, deferred) |
+| 2026-10-05 | M5: Lights page shows a bulb (outline = off, filled = on) with ON/OFF; screen dims while the lights are on. Player/Gate glyphs are dithered without a phone subscribed to commands |

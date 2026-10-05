@@ -122,6 +122,20 @@ pub unsafe extern "C" fn swet_ble_control(data: *const u8, len: u8) {
     with_app(|a| a.ble_control(bytes));
 }
 
+/// The version string for the BLE Device Information service. Doesn't touch
+/// the App, so C may call it before `swet_init()`.
+///
+/// # Safety
+/// `out` must point to `cap` writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swet_version(out: *mut u8, cap: u8) -> u8 {
+    let v = swet_heart::config::VERSION.as_bytes();
+    let n = v.len().min(usize::from(cap));
+    let dst = unsafe { core::slice::from_raw_parts_mut(out, n) };
+    dst.copy_from_slice(&v[..n]);
+    n as u8
+}
+
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {

@@ -75,6 +75,9 @@ pub struct Model {
     pub pas: u8,
     pub walk: bool,
     pub sport: bool,
+    pub lights: bool,
+    /// A phone is subscribed to commands: Player and Gate work.
+    pub commands: bool,
     pub trip: crate::rides::Trip,
     pub batt: crate::rides::Trip,
     pub ride: crate::rides::Trip,

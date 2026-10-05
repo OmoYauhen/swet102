@@ -17,24 +17,40 @@ const BAT_X: i32 = 116;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Pas,
+    Lights,
+    Player,
+    Gate,
 }
 
 impl Page {
-    /// Ring order (PRODUCT §3.1). Lights, Player and Gate join in later milestones.
-    const RING: [Page; 1] = [Page::Pas];
+    /// Ring order (PRODUCT §3.1).
+    const RING: [Page; 4] = [Page::Pas, Page::Lights, Page::Player, Page::Gate];
 
     fn next(self) -> Page {
         let i = Self::RING.iter().position(|&p| p == self).unwrap_or(0);
         Self::RING[(i + 1) % Self::RING.len()]
     }
 
+    /// Pages that send commands to the phone (TECH_DESIGN §5.2).
+    pub fn needs_ble(self) -> bool {
+        matches!(self, Page::Player | Page::Gate)
+    }
+
     fn gestures(self, cfg: GestureCfg) -> GestureCfg {
+        const HOLD: BtnCfg = BtnCfg {
+            double: false,
+            hold: true,
+        };
         match self {
             // LEFT hold at level 0 = walk assist
-            Page::Pas => cfg.with(
-                Btn::Left,
+            Page::Pas => cfg.with(Btn::Left, HOLD),
+            Page::Lights | Page::Gate => cfg,
+            // hold = previous / next track, RIGHT double = play / pause;
+            // only RIGHT waits for a double-click, so volume − stays instant
+            Page::Player => cfg.with(Btn::Left, HOLD).with(
+                Btn::Right,
                 BtnCfg {
-                    double: false,
+                    double: true,
                     hold: true,
                 },
             ),
@@ -127,9 +143,120 @@ impl RideScreen {
                 let gy = y + (h - i32::from(W95.height)) / 2;
                 f.text(&W95, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
             }
+            Page::Lights => {
+                let (art, label): (&Glyph, &[u8]) = if m.lights {
+                    (&BULB_ON, b"ON")
+                } else {
+                    (&BULB_OFF, b"OFF")
+                };
+                glyph(f, art, x + (w - GLYPH_W) / 2, 9, false);
+                let lw = label.len() as i32 * 4 - 1;
+                f.text3x5(x + (w - lw) / 2, 50, label, 1, Mode::Clear);
+            }
+            // without a subscribed phone the command pages are dithered and
+            // ignore LEFT/RIGHT (PRODUCT §3.1)
+            Page::Player => glyph(f, &NOTE, x + (w - GLYPH_W) / 2, 20, !m.commands),
+            Page::Gate => glyph(f, &KEY, x + (w - GLYPH_W) / 2, 17, !m.commands),
         }
     }
 }
+
+/// Page glyph: 11×16 text art drawn ×2, black on the white tile.
+type Glyph = [&'static [u8; 11]; 16];
+const GLYPH_W: i32 = 22;
+
+/// `dither` keeps every other pixel: the "unavailable" look.
+fn glyph(f: &mut Frame, art: &Glyph, x: i32, y: i32, dither: bool) {
+    for (r, row) in art.iter().enumerate() {
+        for (c, &px) in row.iter().enumerate() {
+            if px != b'#' {
+                continue;
+            }
+            let (gx, gy) = (x + 2 * c as i32, y + 2 * r as i32);
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                if !dither || (gx + dx + gy + dy) % 2 == 0 {
+                    f.pixel(gx + dx, gy + dy, Mode::Clear);
+                }
+            }
+        }
+    }
+}
+
+const BULB_OFF: Glyph = [
+    b"...#####...",
+    b"..#.....#..",
+    b".#.......#.",
+    b"#.........#",
+    b"#.........#",
+    b"#.........#",
+    b"#.........#",
+    b".#.......#.",
+    b"..#.....#..",
+    b"...#...#...",
+    b"...#####...",
+    b"...........",
+    b"...#####...",
+    b"...........",
+    b"....###....",
+    b"...........",
+];
+
+const BULB_ON: Glyph = [
+    b"...#####...",
+    b"..#######..",
+    b".#########.",
+    b"###########",
+    b"###########",
+    b"###########",
+    b"###########",
+    b".#########.",
+    b"..#######..",
+    b"...#####...",
+    b"...#####...",
+    b"...........",
+    b"...#####...",
+    b"...........",
+    b"....###....",
+    b"...........",
+];
+
+const NOTE: Glyph = [
+    b"....#######",
+    b"....#######",
+    b"....#.....#",
+    b"....#.....#",
+    b"....#.....#",
+    b"....#.....#",
+    b"....#.....#",
+    b"....#.....#",
+    b"..###...###",
+    b".####..####",
+    b".####..####",
+    b"..##....##.",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];
+
+const KEY: Glyph = [
+    b"...#####...",
+    b"..#######..",
+    b".###...###.",
+    b".##.....##.",
+    b".###...###.",
+    b"..#######..",
+    b"...#####...",
+    b"....###....",
+    b"....###....",
+    b"....#####..",
+    b"....###....",
+    b"....####...",
+    b"....###....",
+    b"....#####..",
+    b"....###....",
+    b"...........",
+];
 
 /// Walk-assist glyph: a solid up arrow centred on (`cx`, `cy`).
 fn up_arrow(f: &mut Frame, cx: i32, cy: i32, mode: Mode) {

@@ -25,7 +25,7 @@
 
 #define TICK_MS                 20
 #define APP_TIMER_PRESCALER     0
-#define APP_TIMER_OP_QUEUE_SIZE 4
+#define APP_TIMER_OP_QUEUE_SIZE 8   /* tick timer + connection-parameter timer */
 #define SCHED_EVT_SIZE          0   /* SoftDevice events carry no payload; the tick timer bypasses the scheduler */
 #define SCHED_QUEUE_SIZE        16
 #define STACK_PAINT             0xDEADBEEFu
@@ -68,7 +68,7 @@ static uint32_t stack_free_bytes(void)
     return (uint32_t)((uintptr_t)p - (uintptr_t)&__StackLimit);
 }
 
-static void ble_evt(ble_evt_t *evt) { (void)evt; }
+static void ble_evt(ble_evt_t *evt) { ble_on_evt(evt); }
 
 static void sys_evt(uint32_t evt)
 {
@@ -144,6 +144,7 @@ int main(void)
     lcd_init();
     hal_init();
     store_init(); /* before swet_init(): the core loads its record in init() */
+    ble_init();   /* after APP_TIMER_INIT: the conn-params module owns a timer */
 
     swet_init(0);
 

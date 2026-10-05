@@ -9,7 +9,6 @@
 
 #include "board.h"
 #include "app_uart.h"
-#include "ble_gap.h"
 #include "nrf_gpio.h"
 #include "nrf_nvic.h"
 #include "nrf_soc.h"
@@ -87,21 +86,7 @@ int16_t hal_uart_read(void)
     return app_uart_get(&b) == NRF_SUCCESS ? b : -1;
 }
 
-/* hal_store_* live in store.c (FDS). */
-
-/* GATT arrives in M5. */
-uint8_t hal_ble_state(void) { return 0; }
-void hal_ble_notify(uint8_t ch, const uint8_t *buf, uint8_t len) { (void)ch; (void)buf; (void)len; }
-
-void hal_ble_address(uint8_t *out)
-{
-    ble_gap_addr_t a;
-    if (sd_ble_gap_address_get(&a) == NRF_SUCCESS) {
-        memcpy(out, a.addr, 6);
-    } else {
-        memset(out, 0, 6);
-    }
-}
+/* hal_store_* live in store.c (FDS), hal_ble_* in ble.c. */
 
 void hal_power_off(void)
 {
@@ -131,6 +116,7 @@ uint32_t hal_diag(uint8_t id)
     case 7: return g_diag.flush_avg_us;
     case 8: return g_diag.flush_max_us;
     case 9: return g_diag.store_errors;
+    case 10: return g_diag.ble_dropped;
     default: return 0;
     }
 }

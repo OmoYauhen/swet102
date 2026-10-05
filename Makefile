@@ -46,6 +46,10 @@ SDK_SRC := \
   components/drivers_nrf/spi_master/nrf_drv_spi.c \
   components/drivers_nrf/uart/nrf_drv_uart.c \
   components/drivers_nrf/wdt/nrf_drv_wdt.c \
+  components/ble/common/ble_advdata.c \
+  components/ble/common/ble_conn_params.c \
+  components/ble/common/ble_srv_common.c \
+  components/ble/ble_services/ble_dis/ble_dis.c \
   components/softdevice/common/softdevice_handler/softdevice_handler.c \
   components/softdevice/common/softdevice_handler/softdevice_handler_appsh.c \
   components/toolchain/system_nrf51.c
@@ -78,7 +82,8 @@ SDK_INC := \
   components/libraries/log \
   components/libraries/log/src \
   components/libraries/experimental_section_vars \
-  components/ble/common
+  components/ble/common \
+  components/ble/ble_services/ble_dis
 
 DEFS := -DNRF51 -DNRF51822 -DS130 -DSOFTDEVICE_PRESENT -DBLE_STACK_SUPPORT_REQD \
         -DNRF_SD_BLE_API_VERSION=2 -DSWI_DISABLE0 -DUSE_WITH_BOOTLOADER
