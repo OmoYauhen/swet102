@@ -525,6 +525,32 @@ The core sits behind a HAL trait (display, buttons, UART, flash, BLE, power) so 
 
 ---
 
+## 11a. Future ideas (after M6)
+
+Not planned for any milestone yet. Kept here so they aren't lost.
+
+### Get Money (Lightning withdraw)
+
+A menu item **"Get Money"**. You enter **3 digits** with the same digit picker as
+the PIN (LEFT/RIGHT change the digit, M next, PWR back), and the display shows a
+QR code with an **LNURL-withdraw** link for that many sats (000–999). Scanning it
+with a Lightning wallet (Phoenix, Zeus, Breez, …) pulls the sats into the wallet.
+
+- The bike holds no money and has no internet. The sats come from a server
+  you run (e.g. LNbits); the display only produces a link the server trusts.
+- Every link works **once** and is **signed** by the display, so a photo of the
+  screen can't be reused and nobody can make up their own amount.
+- Optional limits on the server side: per-link maximum, daily total.
+
+### The bike pays per km
+
+Same mechanism, but the amount comes from riding: the display offers a link
+worth (say) N sats per km ridden since the last claim, e.g. from the battery
+trip or a dedicated "reward" counter. Claiming resets that counter.
+
+Both ideas share the same pieces (signed one-time links, a QR code generated on
+the display, a small server); see TECH_DESIGN.md §15a.
+
 ## 12. Open questions
 
 1. **Speed-limit unit**: wheel RPM vs. km/h × 10. The owner will answer this later (stand test in §6).
@@ -572,6 +598,7 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-04 | Core logic in Rust (was C), thin C platform layer for the SDK; distances stored in meters (see TECH_DESIGN.md) |
 | 2026-10-05 | PAS number font: W95FA |
 | 2026-10-05 | Error screen: returns after 10 s if still present; 2 s grace after power-on; error code and "!" in W95FA |
+| 2026-10-05 | Future (after M6): "Get Money" menu item (3-digit amount → signed one-time LNURL-withdraw QR) and "the bike pays per km"; see §11a |
 | 2026-10-04 | Odometer starts at 0 when switching from Swang Stodva; no migration or seed value |
 | 2026-10-04 | Store the speed limit instead of a mode; sport = limit > 25 (city PIN → 25, sport PIN → 99) |
 | 2026-10-04 | Every trip (manual, battery, ride) tracks max speed and average speed over moving time |
