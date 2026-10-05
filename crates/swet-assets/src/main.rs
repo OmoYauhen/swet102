@@ -211,19 +211,19 @@ fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
     (Bitmap { w, h, px: px_out }, offsets)
 }
 
-/// The repo URL for the Firmware screen's QR code. Uppercase so the QR uses
-/// alphanumeric mode and fits version 2 (25×25); scheme, host and GitHub paths
-/// are case-insensitive.
-const REPO_QR: &str = "HTTPS://GITHUB.COM/OMOYAUHEN/SWET102";
+/// The repo URL for the Firmware screen's QR code. Lowercase means byte mode,
+/// so with low error correction it is version 3 (29×29): 58 px at 2 px per
+/// module, leaving a 1.5-module quiet zone on the 64 px display.
+const REPO_QR: &str = "https://github.com/OmoYauhen/swet102";
 
 /// QR code as a bitmap, 1 = dark module, no quiet zone.
 fn qr_bitmap(data: &str) -> Bitmap {
     use qrcode::{EcLevel, QrCode};
-    let code = QrCode::with_error_correction_level(data.as_bytes(), EcLevel::M).expect("QR fits");
+    let code = QrCode::with_error_correction_level(data.as_bytes(), EcLevel::L).expect("QR fits");
     let w = code.width();
-    assert_eq!(
-        w, 25,
-        "{data:?} must fit QR version 2 to stay 50 px at 2 px/module"
+    assert!(
+        w <= 29,
+        "{data:?} must fit QR version 3 to stay ≤ 58 px at 2 px/module"
     );
     let px = code
         .to_colors()
@@ -339,9 +339,9 @@ fn main() {
     let (stride, bits) = qr.pack();
     let _ = write!(
         out,
-        "\n/// QR code for `{REPO_QR}` (version 2-M, 1 = dark module, no quiet zone).\n\
+        "\n/// QR code for `{REPO_QR}` ({}×{} modules, EC level L, 1 = dark module, no quiet zone).\n\
          pub static QR_REPO: Image = Image {{\n    w: {},\n    h: {},\n    stride: {stride},\n    bits: &[",
-        qr.w, qr.h
+        qr.w, qr.h, qr.w, qr.h
     );
     bytes_lit(&mut out, &bits);
     out.push_str("],\n};\n");

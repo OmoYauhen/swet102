@@ -204,9 +204,10 @@ pub fn render_ble(f: &mut Frame, b: &BleInfo) {
     line(f, 48, &addr);
 }
 
-/// Version info on the left, a QR code to the GitHub repo on the right.
+/// A QR code to the GitHub repo on the left, version info on the right.
 pub fn render_firmware(f: &mut Frame) {
-    f.text(&TEXT, b"Swet102", 2, 1, 1, Mode::Set);
+    const TX: i32 = 68;
+    f.text(&TEXT, b"Swet102", TX, 1, 1, Mode::Set);
     let rows: [(&[u8], i32); 5] = [
         (config::VERSION.as_bytes(), 20),
         (b"BUILD", 31),
@@ -215,12 +216,12 @@ pub fn render_firmware(f: &mut Frame) {
         (config::GIT_HASH.as_bytes(), 56),
     ];
     for (s, y) in rows {
-        f.text3x5(2, y, s, 1, Mode::Set);
+        f.text3x5(TX, y, s, 1, Mode::Set);
     }
 
-    // QR: dark modules on a lit square, 2 px per module; the lit margin is the
-    // quiet zone (7 px = 3.5 modules) scanners need around the code.
-    const QR_X: i32 = W - 64;
+    // QR: dark modules on a lit square, 2 px per module; the lit margin around
+    // it is the quiet zone scanners need (3 px = 1.5 modules for version 3).
+    const QR_X: i32 = 0;
     f.fill_rect(QR_X, 0, 64, 64, Mode::Set);
     let (qw, qh) = (i32::from(QR_REPO.w), i32::from(QR_REPO.h));
     let (x0, y0) = (QR_X + (64 - 2 * qw) / 2, (64 - 2 * qh) / 2);

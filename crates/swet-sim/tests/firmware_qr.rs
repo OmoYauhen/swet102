@@ -31,5 +31,5 @@ fn firmware_screen_qr_scans_to_the_repo() {
     let grids = img.detect_grids();
     assert_eq!(grids.len(), 1, "exactly one QR code on screen");
     let (_meta, content) = grids[0].decode().expect("the QR code decodes");
-    assert_eq!(content, "HTTPS://GITHUB.COM/OMOYAUHEN/SWET102");
+    assert_eq!(content, "https://github.com/OmoYauhen/swet102");
 }
