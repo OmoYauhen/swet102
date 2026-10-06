@@ -10,9 +10,9 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 Lights, Player and Gate pages, motor bus, error screens, saved settings, lock
 with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
 message, menu, BLE (telemetry, trips, phone commands, DFU from the phone), boot
-animation, page slides, PAS roll and info-pane slide. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
+animation, page, PAS and info-pane slides. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
 
-![swet102 demo: boot, PAS roll, pages, info pane](docs/demo.gif)
+![swet102 demo: boot, PAS, pages, info pane](docs/demo.gif)
 
 ## Layout
 

@@ -1,4 +1,4 @@
-//! M6: boot animation, page slide, PAS roll, info-pane slide; input never
+//! M6: boot animation, page, PAS and info-pane slides; input never
 //! waits behind an animation.
 
 use swet_heart::store::Record;
@@ -28,14 +28,19 @@ fn until(s: &mut Sim, cond: impl Fn(&Sim) -> bool) {
 }
 
 #[test]
-fn boot_shows_sparkles_then_scrolls_the_version_then_rides() {
+fn boot_shows_sparkles_then_name_and_version_then_rides() {
     let mut s = Sim::booting(None);
     s.run_ms(300);
     assert_eq!(s.app().screen(), Screen::Boot);
     s.assert_screen("m6_boot_sparkles");
 
-    s.run_ms(boot::SPARKLES_MS + 500 - 300);
-    s.assert_screen("m6_boot_scroll");
+    s.run_ms(boot::SPARKLES_MS + 100 - 300);
+    s.assert_screen("m6_boot_slide_in"); // both rows coming in from the right
+    s.run_ms(boot::SLIDE_IN_MS + 300 - 100);
+    s.assert_screen("m6_boot_rows"); // still, readable
+    let before = s.screen();
+    s.run_ms(boot::HOLD_MS / 2);
+    assert!(s.screen() == before, "the rows hold still");
 
     let total = boot::duration_ms();
     assert!((1500..=3000).contains(&total), "boot takes {total} ms");
@@ -99,7 +104,7 @@ fn page_switch_slides_sideways_inside_the_tile() {
 }
 
 #[test]
-fn pas_change_rolls_the_digit() {
+fn pas_change_slides_the_number() {
     let mut s = riding(27);
     s.press(Buttons::RIGHT);
     s.run_ms(60);
@@ -107,8 +112,8 @@ fn pas_change_rolls_the_digit() {
     until(&mut s, |s| s.app().state().pas == 1);
     assert!(s.app().animating());
     s.run_ms(40);
-    s.assert_screen("m6_pas_roll");
-    s.run_ms(u32::from(ride::PAS_ROLL_MS));
+    s.assert_screen("m6_pas_slide");
+    s.run_ms(u32::from(ride::PAS_SLIDE_MS));
     assert!(!s.app().animating());
 }
 
@@ -144,12 +149,12 @@ fn a_press_snaps_a_running_animation_to_its_end() {
 }
 
 #[test]
-fn fast_pas_taps_do_not_queue_behind_the_roll() {
+fn fast_pas_taps_do_not_queue_behind_the_slide() {
     let mut s = riding(0);
     for _ in 0..5 {
         s.click(Buttons::RIGHT);
     }
     assert_eq!(s.app().state().pas, 5);
-    s.run_ms(u32::from(ride::PAS_ROLL_MS));
+    s.run_ms(u32::from(ride::PAS_SLIDE_MS));
     assert!(!s.app().animating());
 }

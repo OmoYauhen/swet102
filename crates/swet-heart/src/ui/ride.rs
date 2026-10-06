@@ -113,21 +113,19 @@ impl TileGlyph {
 /// Animations are compile-time constants (PRODUCT §3.4).
 pub const PAGE_SLIDE_MS: u16 = 150;
 pub const PANE_SLIDE_MS: u16 = 200;
-pub const PAS_ROLL_MS: u16 = 100;
+pub const PAS_SLIDE_MS: u16 = 100;
 
 /// The ride screen's own state. Zero-initialised: `Pas`, `Speed`, idle tweens.
 pub struct RideScreen {
     pub page: Page,
     pub view: View,
     /// Inside the tile, `tile_from` leaves and the current glyph arrives:
-    /// a page slide comes in from the right (from the left when `tile_back`,
-    /// PWR back to PAS); a PAS roll (`tile_roll`) comes up from below (down
-    /// from above when `tile_back`). All false by default, so the App stays
+    /// it comes in from the right, or from the left when `tile_back` (PWR back
+    /// to PAS, or a lower PAS level). False by default, so the App stays
     /// zero-initialised.
     tile: Tween,
     tile_from: TileGlyph,
     tile_back: bool,
-    tile_roll: bool,
     /// Info-pane slide: `pane_from` leaves at the top, `view` comes up from the bottom.
     pane: Tween,
     pane_from: View,
@@ -147,7 +145,6 @@ impl RideScreen {
             tile: Tween::IDLE,
             tile_from: TileGlyph::Pas(0),
             tile_back: false,
-            tile_roll: false,
             pane: Tween::IDLE,
             pane_from: View::Speed,
         }
@@ -155,13 +152,7 @@ impl RideScreen {
 
     /// M click: next page, sliding in from the right.
     pub fn next_page(&mut self, m: &Model, now: u32) {
-        self.slide_tile(
-            TileGlyph::of(self.page, m),
-            false,
-            false,
-            PAGE_SLIDE_MS,
-            now,
-        );
+        self.slide_tile(TileGlyph::of(self.page, m), false, PAGE_SLIDE_MS, now);
         self.page = self.page.next();
     }
 
@@ -175,7 +166,7 @@ impl RideScreen {
     /// PWR click: back to PAS, sliding in from the left (the way back round the ring).
     pub fn goto_pas(&mut self, m: &Model, now: u32) {
         if self.page != Page::Pas {
-            self.slide_tile(TileGlyph::of(self.page, m), true, false, PAGE_SLIDE_MS, now);
+            self.slide_tile(TileGlyph::of(self.page, m), true, PAGE_SLIDE_MS, now);
             self.page = Page::Pas;
         }
     }
@@ -186,18 +177,17 @@ impl RideScreen {
         self.snap();
     }
 
-    /// PAS changed on the PAS page: the digit rolls, odometer style — a higher
-    /// level comes up from below, a lower one drops in from above.
-    pub fn roll_pas(&mut self, from: u8, to: u8, now: u32) {
+    /// PAS changed on the PAS page: the number slides like the pages do — a
+    /// higher level comes in from the right, a lower one from the left.
+    pub fn slide_pas(&mut self, from: u8, to: u8, now: u32) {
         if self.page == Page::Pas && from != to {
-            self.slide_tile(TileGlyph::Pas(from), to < from, true, PAS_ROLL_MS, now);
+            self.slide_tile(TileGlyph::Pas(from), to < from, PAS_SLIDE_MS, now);
         }
     }
 
-    fn slide_tile(&mut self, from: TileGlyph, back: bool, roll: bool, dur: u16, now: u32) {
+    fn slide_tile(&mut self, from: TileGlyph, back: bool, dur: u16, now: u32) {
         self.tile_from = from;
         self.tile_back = back;
-        self.tile_roll = roll;
         self.tile.start(now, dur);
     }
 
@@ -246,27 +236,21 @@ impl RideScreen {
         // the tile edge lands off screen or on black, where it leaves no trace.
         match self.tile.eased(now) {
             Some(e) => {
-                let (span, dir) = if self.tile_roll {
-                    (h, (0, 1))
-                } else {
-                    (w, (1, 0))
-                };
-                let d = travel(span, e);
+                let d = travel(w, e);
                 let sign = if self.tile_back { -1 } else { 1 };
-                // forward: the old glyph leaves left/up, the new one arrives from right/below
-                let (out, inn) = (-d * sign, (span - d) * sign);
-                draw_glyph(f, self.tile_from, m, out * dir.0, out * dir.1);
-                draw_glyph(f, current, m, inn * dir.0, inn * dir.1);
+                // forward: the old glyph leaves to the left, the new one arrives from the right
+                draw_glyph(f, self.tile_from, m, -d * sign);
+                draw_glyph(f, current, m, (w - d) * sign);
             }
-            None => draw_glyph(f, current, m, 0, 0),
+            None => draw_glyph(f, current, m, 0),
         }
     }
 }
 
-/// One tile glyph, shifted by (`dx`, `dy`).
-fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32, dy: i32) {
+/// One tile glyph, shifted right by `dx`.
+fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32) {
     let (x, y, w, h) = TILE;
-    let (x, y) = (x + dx, y + dy);
+    let x = x + dx;
     match g {
         TileGlyph::Walk => up_arrow(f, x + w / 2, y + h / 2, Mode::Clear),
         TileGlyph::Pas(pas) => {

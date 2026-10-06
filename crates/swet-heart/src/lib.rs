@@ -586,7 +586,7 @@ impl<H: Hal> App<H> {
     fn page_event(&mut self, ev: Event, now: u32) {
         let pas = self.state.pas;
         self.page_command(ev);
-        self.ride.roll_pas(pas, self.state.pas, now);
+        self.ride.slide_pas(pas, self.state.pas, now);
     }
 
     fn page_command(&mut self, ev: Event) {
@@ -724,7 +724,7 @@ impl<H: Hal> App<H> {
         self.popup_shown()
     }
 
-    /// A page slide, PAS roll or pane slide is running.
+    /// A page, PAS or info-pane slide is running.
     pub fn animating(&self) -> bool {
         self.ride.animating(self.now)
     }

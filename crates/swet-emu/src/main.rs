@@ -506,7 +506,7 @@ fn report_gif(r: record::Recorder) {
     }
 }
 
-/// Headless: a scripted tour (boot, PAS roll, every page, pane slides) as a GIF.
+/// Headless: a scripted tour (boot, PAS, every page, pane slides) as a GIF.
 fn demo_gif(path: &str) {
     let mut sim = Sim::booting(None);
     sim.phone_connect();
@@ -526,7 +526,7 @@ fn demo_gif(path: &str) {
         swet_heart::ui::boot::duration_ms() + 800,
     );
     for _ in 0..3 {
-        tap(&mut sim, &mut rec, Buttons::RIGHT, 500); // PAS 1, 2, 3: the digit rolls
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 500); // PAS 1, 2, 3: the number slides
     }
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Lights
     tap(&mut sim, &mut rec, Buttons::RIGHT, 1000); // lights on

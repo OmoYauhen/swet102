@@ -350,16 +350,19 @@ impl Tween {
 - **Input during an animation:** a new button press (`Down`) first calls `snap()` on
   every active tween, then gets handled. Nothing queues. Only the press: the release
   of the double-click that started a pane slide must not cut it short.
-- **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then `SWET102 v<version>`
-  in `TEXT` magnified so its lit rows fill the 64 px height (`Frame::text_scaled`,
-  `Font::ink_rows`), scrolling in from the right at 500 px/s (10 px/frame) until
-  it's off screen, ≈ 2.1 s in all (2.4 s with `-dev`). Then `Ride` or `Pin`. Popups
-  wait until it ends, so a missing motor shows the `--` screen right after it. Any
-  button click skips it and does nothing else.
-- **Slides** (`ui/ride.rs`): page 150 ms, horizontal inside the tile (in from the
-  right on M, from the left on PWR back to PAS); PAS roll 100 ms, vertical (up when
-  the level rises); info pane 200 ms, vertical (the old view leaves at the top, the
-  new one comes up from the bottom). No clip rectangles: the tile is drawn first and
+- **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then two rows, `SWET102`
+  over `v<version>`, in `TEXT` magnified by the largest scale that fits both
+  (`Frame::text_scaled`, `Font::ink_rows`; 2× today). They slide in from the right
+  (400 ms, ease-out), hold still for 1.2 s, and slide out to the left (400 ms,
+  ease-in): ≈ 2.6 s in all. A dev build drops the `v` (`0.1.0-dev` would not fit
+  otherwise). Then `Ride` or `Pin`. Popups wait until it ends, so a missing motor
+  shows the `--` screen right after it. Any button click skips it and does nothing
+  else.
+- **Slides** (`ui/ride.rs`): all horizontal inside the tile: page 150 ms (in from
+  the right on M, from the left on PWR back to PAS), PAS 100 ms (a higher level in
+  from the right, a lower one from the left); info pane 200 ms, vertical (the old
+  view leaves at the top, the new one comes up from the bottom). No clip
+  rectangles: the tile is drawn first and
   its glyphs are black (Clear), so one sliding past the tile edge lands off screen
   or on black and the pane drawn after it covers the spill; a pane sliding past the
   top or bottom is clipped by the screen.
@@ -947,7 +950,7 @@ The new GATT service and advertising policy (§9) are C, but written fresh.
 | M3 | Persistence and lock | store, save policy, PIN screen, modes, battery icon bolt, power-off/auto-off |
 | M4 | Trips and menu | 3 counters, battery-trip popup, menu with all items and confirmations |
 | M5 | BLE | advertising policy, GATT, commands from Player/Gate, DFU entry |
-| M6 | Polish | boot animation, page/pane slides, PAS roll, GIF capture; first daily-use release |
+| M6 | Polish | boot animation, page/PAS/pane slides, GIF capture; first daily-use release |
 
 ---
 
@@ -1078,3 +1081,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-06 | M6: boot animation as a `Screen::Boot` base (sparkles 600 ms, version scroll 150 px/s, ≈ 2.3 s); popups wait for its end, so no motor → `--` after the boot rather than a frozen frame; a click skips it and is consumed. `Sim` skips it by default (`Sim::booting` keeps it) |
 | 2026-10-06 | M6: emulator GIF capture (F11; `--gif=FILE` records a scripted tour, `docs/demo.gif`); v0.1.0 with `make release` (real PINs only) |
 | 2026-10-07 | M6 (owner's review): boot text scaled to the full screen height (`Frame::text_scaled`, scroll 500 px/s); page slide horizontal, info pane slides vertically; draw order tile → pane → battery replaces the pane-push column clearing |
+| 2026-10-07 | M6 (owner's second look): boot in two rows (`SWET102` / version) that slide in, hold 1.2 s, slide out (the 500 px/s scroll was too fast to read); the PAS number slides horizontally like the pages (`tile_roll` gone) |
