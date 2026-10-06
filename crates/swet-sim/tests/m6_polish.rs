@@ -1,4 +1,4 @@
-//! M6: boot animation, page slide, PAS roll, info-pane push; input never
+//! M6: boot animation, page slide, PAS roll, info-pane slide; input never
 //! waits behind an animation.
 
 use swet_heart::store::Record;
@@ -87,7 +87,7 @@ fn the_link_lost_screen_waits_for_the_boot_to_end() {
 }
 
 #[test]
-fn page_switch_slides_inside_the_tile() {
+fn page_switch_slides_sideways_inside_the_tile() {
     let mut s = riding(27);
     s.click(Buttons::M);
     until(&mut s, |s| s.app().page() == Page::Lights);
@@ -113,16 +113,16 @@ fn pas_change_rolls_the_digit() {
 }
 
 #[test]
-fn pane_push_slides_live_views() {
+fn pane_slides_up_with_live_views() {
     let mut s = riding(27);
     s.click(Buttons::M);
     s.run_ms(100);
     s.press(Buttons::M); // the second press is the double-click
     until(&mut s, |s| s.app().view() == View::Power);
     s.run_ms(40);
-    s.assert_screen("m6_pane_push"); // speed leaving left, power coming in
+    s.assert_screen("m6_pane_slide"); // speed leaving at the top, power coming up
     s.release(Buttons::M);
-    s.run_ms(u32::from(ride::PANE_PUSH_MS));
+    s.run_ms(u32::from(ride::PANE_SLIDE_MS));
     assert!(!s.app().animating());
 }
 
@@ -136,7 +136,7 @@ fn a_press_snaps_a_running_animation_to_its_end() {
     s.run_ms(60); // debounced: the press arrives
     assert!(
         !s.app().animating(),
-        "snapped on the press, not after the push"
+        "snapped on the press, not after the slide"
     );
     s.release(Buttons::RIGHT);
     s.run_ms(60);

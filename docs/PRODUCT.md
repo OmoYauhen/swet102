@@ -201,9 +201,9 @@ The UI should feel alive, not just redraw. Swang Stodva's renderer already runs 
 
 | Animation | When | Proposal |
 |---|---|---|
-| **Boot** | Power-on, before the riding screen (or the PIN screen if locked) | 1. The **sparkles** icon from Swang Stodva (`assets/sparkles.xbm`) is shown centered, **64 px tall** (full screen height). It's already 64×64, so no crop or scale is needed; if the asset changes, crop or scale it to 64 px tall.<br>2. The icon clears, then **`SWET102 v0.1.0`** scrolls in from the right edge and moves left across the full width. The version comes from the build, not hardcoded.<br>3. Then the riding screen (or the PIN screen). If the motor link isn't up by then, the "--" error screen (§8) says so; it waits for the animation to end instead of interrupting it. Any button skips the animation (that press does nothing else). |
-| **Page switch** | M short, PWR short (jump to PAS) | ~150 ms vertical slide inside the white tile: the old glyph slides out and the new one slides in. The tile itself stays put. |
-| **Info-pane switch** | M double-click | ~200 ms horizontal push: the old view slides left and the new view slides in from the right. Column 1 and the battery don't move. |
+| **Boot** | Power-on, before the riding screen (or the PIN screen if locked) | 1. The **sparkles** icon from Swang Stodva (`assets/sparkles.xbm`) is shown centered, **64 px tall** (full screen height). It's already 64×64, so no crop or scale is needed; if the asset changes, crop or scale it to 64 px tall.<br>2. The icon clears, then **`SWET102 v0.1.0`**, as tall as the screen, scrolls in from the right edge and moves left across the full width. The version comes from the build, not hardcoded.<br>3. Then the riding screen (or the PIN screen). If the motor link isn't up by then, the "--" error screen (§8) says so; it waits for the animation to end instead of interrupting it. Any button skips the animation (that press does nothing else). |
+| **Page switch** | M short, PWR short (jump to PAS) | ~150 ms horizontal slide inside the white tile: the old glyph slides out to the left and the new one comes in from the right (the other way round for PWR back to PAS). The tile itself stays put. |
+| **Info-pane switch** | M double-click | ~200 ms vertical slide: the old view slides up and out, the new view comes up from the bottom. Column 1 and the battery don't move. |
 | **PAS change** | LEFT/RIGHT on the PAS page | Optional: the digit rolls up or down (~100 ms), odometer style. |
 
 Rules:
@@ -607,3 +607,4 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-05 | M5: Lights page shows a bulb (outline = off, filled = on) with ON/OFF; screen dims while the lights are on. Player/Gate glyphs are dithered without a phone subscribed to commands |
 | 2026-10-06 | M6: boot = sparkles 0.6 s, then the version scrolls at 150 px/s (≈ 2.3 s in all); a missing motor shows the "--" screen after the boot instead of a frozen frame. Page slide 150 ms (up for M, down for PWR back to PAS), PAS roll 100 ms, pane push 200 ms; a new button press snaps any running animation |
 | 2026-10-06 | First daily-use release: v0.1.0 |
+| 2026-10-07 | Owner, after trying M6: boot text as tall as the screen (scroll 500 px/s, ≈ 2.1 s in all); page switch slides horizontally, info pane slides vertically (up). The PAS digit still rolls vertically |

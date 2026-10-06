@@ -3,7 +3,7 @@
 use super::Model;
 use super::anim::{Tween, travel};
 use crate::gfx::assets::{SMALL, SPEED, W95};
-use crate::gfx::{Frame, H, Mode, W, num};
+use crate::gfx::{Frame, H, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
 use crate::rides::Trip;
 
@@ -112,20 +112,23 @@ impl TileGlyph {
 
 /// Animations are compile-time constants (PRODUCT §3.4).
 pub const PAGE_SLIDE_MS: u16 = 150;
-pub const PANE_PUSH_MS: u16 = 200;
+pub const PANE_SLIDE_MS: u16 = 200;
 pub const PAS_ROLL_MS: u16 = 100;
 
 /// The ride screen's own state. Zero-initialised: `Pas`, `Speed`, idle tweens.
 pub struct RideScreen {
     pub page: Page,
     pub view: View,
-    /// Page slide or PAS roll inside the tile: `tile_from` leaves, the current
-    /// glyph arrives from below, or from above when `tile_down` (false by
-    /// default, so the App stays zero-initialised).
+    /// Inside the tile, `tile_from` leaves and the current glyph arrives:
+    /// a page slide comes in from the right (from the left when `tile_back`,
+    /// PWR back to PAS); a PAS roll (`tile_roll`) comes up from below (down
+    /// from above when `tile_back`). All false by default, so the App stays
+    /// zero-initialised.
     tile: Tween,
     tile_from: TileGlyph,
-    tile_down: bool,
-    /// Info-pane push: `pane_from` slides out to the left, `view` comes in from the right.
+    tile_back: bool,
+    tile_roll: bool,
+    /// Info-pane slide: `pane_from` leaves at the top, `view` comes up from the bottom.
     pane: Tween,
     pane_from: View,
 }
@@ -143,29 +146,36 @@ impl RideScreen {
             view: View::Speed,
             tile: Tween::IDLE,
             tile_from: TileGlyph::Pas(0),
-            tile_down: false,
+            tile_back: false,
+            tile_roll: false,
             pane: Tween::IDLE,
             pane_from: View::Speed,
         }
     }
 
-    /// M click: next page, sliding up in the tile.
+    /// M click: next page, sliding in from the right.
     pub fn next_page(&mut self, m: &Model, now: u32) {
-        self.slide_tile(TileGlyph::of(self.page, m), true, PAGE_SLIDE_MS, now);
+        self.slide_tile(
+            TileGlyph::of(self.page, m),
+            false,
+            false,
+            PAGE_SLIDE_MS,
+            now,
+        );
         self.page = self.page.next();
     }
 
-    /// M double-click: push the next info view in from the right.
+    /// M double-click: the next info view slides up from the bottom.
     pub fn next_view(&mut self, now: u32) {
         self.pane_from = self.view;
-        self.pane.start(now, PANE_PUSH_MS);
+        self.pane.start(now, PANE_SLIDE_MS);
         self.view = self.view.next();
     }
 
-    /// PWR click: back to PAS, sliding down (the way back round the ring).
+    /// PWR click: back to PAS, sliding in from the left (the way back round the ring).
     pub fn goto_pas(&mut self, m: &Model, now: u32) {
         if self.page != Page::Pas {
-            self.slide_tile(TileGlyph::of(self.page, m), false, PAGE_SLIDE_MS, now);
+            self.slide_tile(TileGlyph::of(self.page, m), true, false, PAGE_SLIDE_MS, now);
             self.page = Page::Pas;
         }
     }
@@ -180,13 +190,14 @@ impl RideScreen {
     /// level comes up from below, a lower one drops in from above.
     pub fn roll_pas(&mut self, from: u8, to: u8, now: u32) {
         if self.page == Page::Pas && from != to {
-            self.slide_tile(TileGlyph::Pas(from), to > from, PAS_ROLL_MS, now);
+            self.slide_tile(TileGlyph::Pas(from), to < from, true, PAS_ROLL_MS, now);
         }
     }
 
-    fn slide_tile(&mut self, from: TileGlyph, up: bool, dur: u16, now: u32) {
+    fn slide_tile(&mut self, from: TileGlyph, back: bool, roll: bool, dur: u16, now: u32) {
         self.tile_from = from;
-        self.tile_down = !up;
+        self.tile_back = back;
+        self.tile_roll = roll;
         self.tile.start(now, dur);
     }
 
@@ -210,19 +221,20 @@ impl RideScreen {
     }
 
     pub fn render(&self, f: &mut Frame, m: &Model, now: u32) {
-        // The pane goes first: during a push it spills over the tile and
-        // battery columns, which are cleared and drawn on top of it.
+        // The tile goes first: a glyph sliding out past its right edge is
+        // drawn black on the black gap and pane, so the pane drawn after it
+        // covers the spill.
+        self.render_tile(f, m, now);
         match self.pane.eased(now) {
             Some(e) => {
-                let dx = travel(PANE_PUSH_SPAN, e);
-                render_pane(f, self.pane_from, m, PANE_X - dx);
-                render_pane(f, self.view, m, PANE_X + PANE_PUSH_SPAN - dx);
-                f.fill_rect(0, 0, PANE_X, H, Mode::Clear);
-                f.fill_rect(PANE_X + PANE_W, 0, W - PANE_X - PANE_W, H, Mode::Clear);
+                // the old view leaves at the top, the new one comes up from the
+                // bottom; both live, the screen edges clip them
+                let dy = travel(H, e);
+                render_pane(f, self.pane_from, m, -dy);
+                render_pane(f, self.view, m, H - dy);
             }
-            None => render_pane(f, self.view, m, PANE_X),
+            None => render_pane(f, self.view, m, 0),
         }
-        self.render_tile(f, m, now);
         render_battery(f, m);
     }
 
@@ -230,31 +242,31 @@ impl RideScreen {
         let (x, y, w, h) = TILE;
         f.round_rect(x, y, w, h, 4, Mode::Set);
         let current = TileGlyph::of(self.page, m);
-        // Glyphs are drawn black (Clear) on the white tile, which spans the
-        // full height: whatever slides past the tile edge falls off screen.
+        // Glyphs are drawn black (Clear) on the white tile: what slides past
+        // the tile edge lands off screen or on black, where it leaves no trace.
         match self.tile.eased(now) {
             Some(e) => {
-                let dy = travel(h, e);
-                let (out, inn) = if !self.tile_down {
-                    (-dy, h - dy)
+                let (span, dir) = if self.tile_roll {
+                    (h, (0, 1))
                 } else {
-                    (dy, dy - h)
+                    (w, (1, 0))
                 };
-                draw_glyph(f, self.tile_from, m, out);
-                draw_glyph(f, current, m, inn);
+                let d = travel(span, e);
+                let sign = if self.tile_back { -1 } else { 1 };
+                // forward: the old glyph leaves left/up, the new one arrives from right/below
+                let (out, inn) = (-d * sign, (span - d) * sign);
+                draw_glyph(f, self.tile_from, m, out * dir.0, out * dir.1);
+                draw_glyph(f, current, m, inn * dir.0, inn * dir.1);
             }
-            None => draw_glyph(f, current, m, 0),
+            None => draw_glyph(f, current, m, 0, 0),
         }
     }
 }
 
-/// How far the pane moves during a push: its width plus the gap.
-const PANE_PUSH_SPAN: i32 = PANE_W + 2;
-
-/// One tile glyph, shifted down by `dy`.
-fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dy: i32) {
+/// One tile glyph, shifted by (`dx`, `dy`).
+fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32, dy: i32) {
     let (x, y, w, h) = TILE;
-    let y = y + dy;
+    let (x, y) = (x + dx, y + dy);
     match g {
         TileGlyph::Walk => up_arrow(f, x + w / 2, y + h / 2, Mode::Clear),
         TileGlyph::Pas(pas) => {
@@ -387,50 +399,52 @@ fn up_arrow(f: &mut Frame, cx: i32, cy: i32, mode: Mode) {
 }
 
 /// Big number centred in the pane with a small unit underneath.
-fn big_value(f: &mut Frame, x0: i32, value: Option<u32>, unit: &[u8]) {
-    let top = 8;
+fn big_value(f: &mut Frame, dy: i32, value: Option<u32>, unit: &[u8]) {
+    let top = 8 + dy;
     match value {
         Some(v) => {
             let mut d = [0u8; 10];
             let s = num::u32_dec(v, &mut d);
             let w = SPEED.width(s, 2);
-            f.text(&SPEED, s, x0 + (PANE_W - w) / 2, top, 2, Mode::Set);
+            f.text(&SPEED, s, PANE_X + (PANE_W - w) / 2, top, 2, Mode::Set);
         }
         None => {
             // no data yet: two dashes
             let cy = top + i32::from(SPEED.height) / 2 - 2;
-            f.fill_rect(x0 + PANE_W / 2 - 22, cy, 18, 5, Mode::Set);
-            f.fill_rect(x0 + PANE_W / 2 + 4, cy, 18, 5, Mode::Set);
+            f.fill_rect(PANE_X + PANE_W / 2 - 22, cy, 18, 5, Mode::Set);
+            f.fill_rect(PANE_X + PANE_W / 2 + 4, cy, 18, 5, Mode::Set);
         }
     }
     let uw = SMALL.width(unit, 1);
     f.text(
         &SMALL,
         unit,
-        x0 + (PANE_W - uw) / 2,
-        64 - i32::from(SMALL.height) - 3,
+        PANE_X + (PANE_W - uw) / 2,
+        dy + 64 - i32::from(SMALL.height) - 3,
         1,
         Mode::Set,
     );
 }
 
-fn render_pane(f: &mut Frame, view: View, m: &Model, x0: i32) {
+/// One info view, shifted down by `dy` (a vertical slide moves it off the
+/// top or bottom of the screen, which clips it).
+fn render_pane(f: &mut Frame, view: View, m: &Model, dy: i32) {
     match view {
-        View::Speed => big_value(f, x0, m.speed_x10.map(|s| (u32::from(s) + 5) / 10), b"km/h"),
+        View::Speed => big_value(f, dy, m.speed_x10.map(|s| (u32::from(s) + 5) / 10), b"km/h"),
         View::Power => {
-            big_value(f, x0, m.power_w.map(u32::from), b"W");
-            f.text3x5(x0, 1, b"POWER", 1, Mode::Set);
+            big_value(f, dy, m.power_w.map(u32::from), b"W");
+            f.text3x5(PANE_X, dy + 1, b"POWER", 1, Mode::Set);
         }
-        View::Trip => trip_view(f, x0, b"TRIP", &m.trip),
-        View::BattTrip => trip_view(f, x0, b"BAT", &m.batt),
-        View::Ride => trip_view(f, x0, b"RIDE", &m.ride),
-        View::Odo => odo_view(f, x0, m),
+        View::Trip => trip_view(f, dy, b"TRIP", &m.trip),
+        View::BattTrip => trip_view(f, dy, b"BAT", &m.batt),
+        View::Ride => trip_view(f, dy, b"RIDE", &m.ride),
+        View::Odo => odo_view(f, dy, m),
     }
 }
 
 /// Distance large with "km", centred in the pane. Below 1000 km with one
 /// decimal, above that in whole km.
-fn distance(f: &mut Frame, x0: i32, m: u32) {
+fn distance(f: &mut Frame, dy: i32, m: u32) {
     let mut d = [0u8; 12];
     let s = if m < 1_000_000 {
         num::u32_dec1(m / 100, &mut d)
@@ -441,8 +455,8 @@ fn distance(f: &mut Frame, x0: i32, m: u32) {
         &d[..s.len()]
     };
     let (vw, uw) = (SPEED.width(s, 1), SMALL.width(b"km", 1));
-    let x = x0 + (PANE_W - (vw + 3 + uw)) / 2;
-    let y = 7;
+    let x = PANE_X + (PANE_W - (vw + 3 + uw)) / 2;
+    let y = dy + 7;
     f.text(&SPEED, s, x, y, 1, Mode::Set);
     let base = y + i32::from(SPEED.height);
     f.text(
@@ -455,22 +469,21 @@ fn distance(f: &mut Frame, x0: i32, m: u32) {
     );
 }
 
-fn line(f: &mut Frame, x0: i32, y: i32, parts: &[&[u8]]) {
-    let mut x = x0;
+fn line(f: &mut Frame, y: i32, parts: &[&[u8]]) {
+    let mut x = PANE_X;
     for p in parts {
         x = f.text3x5(x, y, p, 1, Mode::Set);
     }
 }
 
 /// PRODUCT §3.2: distance, then max and average, then charge used.
-fn trip_view(f: &mut Frame, x0: i32, label: &[u8], t: &Trip) {
-    f.text3x5(x0, 1, label, 1, Mode::Set);
-    distance(f, x0, t.m);
+fn trip_view(f: &mut Frame, dy: i32, label: &[u8], t: &Trip) {
+    f.text3x5(PANE_X, dy + 1, label, 1, Mode::Set);
+    distance(f, dy, t.m);
     let (mut a, mut b) = ([0u8; 12], [0u8; 12]);
     line(
         f,
-        x0,
-        45,
+        dy + 45,
         &[
             b"MAX ",
             num::u32_dec1(u32::from(t.max_x10), &mut a),
@@ -479,18 +492,17 @@ fn trip_view(f: &mut Frame, x0: i32, label: &[u8], t: &Trip) {
         ],
     );
     let mut c = [0u8; 13];
-    line(f, x0, 53, &[num::u32_dec2(t.mah / 10, &mut c), b" AH"]);
+    line(f, dy + 53, &[num::u32_dec2(t.mah / 10, &mut c), b" AH"]);
 }
 
 /// Total distance and the all-time max speed.
-fn odo_view(f: &mut Frame, x0: i32, m: &Model) {
-    f.text3x5(x0, 1, b"ODO", 1, Mode::Set);
-    distance(f, x0, m.odo_m);
+fn odo_view(f: &mut Frame, dy: i32, m: &Model) {
+    f.text3x5(PANE_X, dy + 1, b"ODO", 1, Mode::Set);
+    distance(f, dy, m.odo_m);
     let mut a = [0u8; 12];
     line(
         f,
-        x0,
-        45,
+        dy + 45,
         &[b"MAX ", num::u32_dec1(u32::from(m.odo_max_x10), &mut a)],
     );
 }

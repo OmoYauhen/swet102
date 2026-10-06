@@ -349,16 +349,20 @@ impl Tween {
   clipped to the widget rect. Both are rendered **live** each frame.
 - **Input during an animation:** a new button press (`Down`) first calls `snap()` on
   every active tween, then gets handled. Nothing queues. Only the press: the release
-  of the double-click that started a pane push must not cut it short.
+  of the double-click that started a pane slide must not cut it short.
 - **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then `SWET102 v<version>`
-  scrolls in from the right at 150 px/s (3 px/frame) until it's off screen, ≈ 2.3 s
-  in all. Then `Ride` or `Pin`. Popups wait until it ends, so a missing motor shows
-  the `--` screen right after it. Any button click skips it and does nothing else.
-- **Slides** (`ui/ride.rs`): page 150 ms (up on M, down on PWR back to PAS), PAS
-  roll 100 ms (up when the level rises), pane push 200 ms. The tile spans the full
-  screen height, so a glyph sliding past it falls off screen; during a pane push the
-  pane is drawn first and the tile and battery columns are cleared and redrawn over
-  it.
+  in `TEXT` magnified so its lit rows fill the 64 px height (`Frame::text_scaled`,
+  `Font::ink_rows`), scrolling in from the right at 500 px/s (10 px/frame) until
+  it's off screen, ≈ 2.1 s in all (2.4 s with `-dev`). Then `Ride` or `Pin`. Popups
+  wait until it ends, so a missing motor shows the `--` screen right after it. Any
+  button click skips it and does nothing else.
+- **Slides** (`ui/ride.rs`): page 150 ms, horizontal inside the tile (in from the
+  right on M, from the left on PWR back to PAS); PAS roll 100 ms, vertical (up when
+  the level rises); info pane 200 ms, vertical (the old view leaves at the top, the
+  new one comes up from the bottom). No clip rectangles: the tile is drawn first and
+  its glyphs are black (Clear), so one sliding past the tile edge lands off screen
+  or on black and the pane drawn after it covers the spill; a pane sliding past the
+  top or bottom is clipped by the screen.
 
 ### 5.5 Event routing
 
@@ -1073,3 +1077,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-06 | M6: `ui/anim.rs` Tween (Q8 ease-out, time-based, zero-initialised); page slide 150 ms, PAS roll 100 ms, pane push 200 ms; a new press (`Down`) snaps running tweens, not the release |
 | 2026-10-06 | M6: boot animation as a `Screen::Boot` base (sparkles 600 ms, version scroll 150 px/s, ≈ 2.3 s); popups wait for its end, so no motor → `--` after the boot rather than a frozen frame; a click skips it and is consumed. `Sim` skips it by default (`Sim::booting` keeps it) |
 | 2026-10-06 | M6: emulator GIF capture (F11; `--gif=FILE` records a scripted tour, `docs/demo.gif`); v0.1.0 with `make release` (real PINs only) |
+| 2026-10-07 | M6 (owner's review): boot text scaled to the full screen height (`Frame::text_scaled`, scroll 500 px/s); page slide horizontal, info pane slides vertically; draw order tile → pane → battery replaces the pane-push column clearing |

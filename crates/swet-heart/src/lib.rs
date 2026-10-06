@@ -468,7 +468,7 @@ impl<H: Hal> App<H> {
         }
         // Input never waits behind an animation (PRODUCT §3.4): a new press
         // snaps it to its end. Only the press: the release of the double-click
-        // that started a pane push must not cut it short.
+        // that started a pane slide must not cut it short.
         if ev.g == Down {
             self.ride.snap();
         }
@@ -724,7 +724,7 @@ impl<H: Hal> App<H> {
         self.popup_shown()
     }
 
-    /// A page slide, PAS roll or pane push is running.
+    /// A page slide, PAS roll or pane slide is running.
     pub fn animating(&self) -> bool {
         self.ride.animating(self.now)
     }
