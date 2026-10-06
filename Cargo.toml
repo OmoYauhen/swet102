@@ -6,7 +6,7 @@ members = ["crates/swet-heart", "crates/swet-fw", "crates/swet-sim", "crates/swe
 default-members = ["crates/swet-heart", "crates/swet-sim", "crates/swet-emu"]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
 repository = "https://github.com/OmoYauhen/swet102"

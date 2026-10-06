@@ -1,5 +1,5 @@
 # User-visible version. Keep in sync with [workspace.package] version in Cargo.toml.
-VERSION_STRING := 0.0.1
+VERSION_STRING := 0.1.0
 
 # DFU application version. The resident bootloader refuses anything not strictly
 # greater than what's installed — including other firmwares flashed the same day

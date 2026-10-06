@@ -46,6 +46,27 @@ impl Font {
         Some((x0, i32::from(self.offsets[i + 1]) - x0))
     }
 
+    fn lit(&self, x: i32, y: i32) -> bool {
+        let row = y as usize * usize::from(self.stride);
+        self.bits[row + (x >> 3) as usize] >> (x & 7) & 1 != 0
+    }
+
+    /// First and last row (inclusive) that any glyph of `s` lights, if any.
+    pub fn ink_rows(&self, s: &[u8]) -> Option<(i32, i32)> {
+        let mut rows: Option<(i32, i32)> = None;
+        for &c in s {
+            let Some((sx, w)) = self.glyph(c) else {
+                continue;
+            };
+            for y in 0..i32::from(self.height) {
+                if (sx..sx + w).any(|x| self.lit(x, y)) {
+                    rows = Some(rows.map_or((y, y), |(a, b)| (a.min(y), b.max(y))));
+                }
+            }
+        }
+        rows
+    }
+
     /// Width of `s` in pixels with `gap` px between glyphs.
     pub fn width(&self, s: &[u8], gap: i32) -> i32 {
         let w: i32 = s
@@ -210,6 +231,39 @@ impl Frame {
                 );
                 cx += w + gap;
             }
+        }
+        cx
+    }
+
+    /// Like [`Frame::text`], every font pixel drawn as a `scale`×`scale` block
+    /// (`gap` in font pixels). Pixel by pixel: meant for the occasional big
+    /// line, not per-frame UI. Returns the x after the last glyph.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_scaled(
+        &mut self,
+        font: &Font,
+        s: &[u8],
+        x: i32,
+        y: i32,
+        gap: i32,
+        scale: i32,
+        mode: Mode,
+    ) -> i32 {
+        let mut cx = x;
+        for &c in s {
+            let Some((sx, w)) = font.glyph(c) else {
+                continue;
+            };
+            if cx < W && cx + w * scale > 0 {
+                for gy in 0..i32::from(font.height) {
+                    for gx in 0..w {
+                        if font.lit(sx + gx, gy) {
+                            self.fill_rect(cx + gx * scale, y + gy * scale, scale, scale, mode);
+                        }
+                    }
+                }
+            }
+            cx += (w + gap) * scale;
         }
         cx
     }
@@ -423,6 +477,35 @@ mod tests {
                 assert!(fast == slow, "fill differs for ({x},{y},{w},{h}) {mode:?}");
             }
         }
+    }
+
+    #[test]
+    fn scaled_text_is_text_magnified() {
+        use super::assets::TEXT;
+        let s = b"SWET102 v0.1";
+        let mut one = Frame::new();
+        let end1 = one.text(&TEXT, s, 3, 2, 1, Mode::Set);
+        let mut big = Frame::new();
+        let end3 = big.text_scaled(&TEXT, s, 3, 2, 1, 3, Mode::Set);
+        // every big pixel comes from the 1× pixel it magnifies
+        for y in 0..H {
+            for x in 0..W {
+                let src = one.get(3 + (x - 3).div_euclid(3), 2 + (y - 2).div_euclid(3));
+                assert_eq!(big.get(x, y), x >= 3 && y >= 2 && src, "({x},{y})");
+            }
+        }
+        assert_eq!(end3 - 3, (end1 - 3) * 3);
+    }
+
+    #[test]
+    fn ink_rows_skip_empty_rows() {
+        use super::assets::TEXT;
+        let (top, bottom) = TEXT.ink_rows(b"SWET").expect("lit");
+        assert!(
+            top > 0 && bottom < i32::from(TEXT.height) - 1,
+            "{top}..{bottom}"
+        );
+        assert_eq!(TEXT.ink_rows(b" "), None);
     }
 
     #[test]

@@ -28,6 +28,7 @@ fn show_view(s: &mut Sim, v: View) {
             return;
         }
         s.double_click(Buttons::M);
+        s.run_ms(250); // let the pane push finish
     }
     panic!("view {v:?} not reached");
 }

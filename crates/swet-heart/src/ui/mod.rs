@@ -1,6 +1,8 @@
 //! Screen stack and rendering (TECH_DESIGN §5). Screens are enum variants;
 //! the App routes events to the top one (§5.5).
 
+pub mod anim;
+pub mod boot;
 pub mod diag;
 pub mod menu;
 pub mod pin;
@@ -24,6 +26,8 @@ pub enum Screen {
     Diag,
     Ble,
     Firmware,
+    /// Power-on animation; then `Ride` or `Pin` (PRODUCT §3.4).
+    Boot,
 }
 
 const DEPTH: usize = 4;
@@ -107,6 +111,8 @@ pub struct Scene<'a> {
     pub popup: popup::Popup,
     pub overlay: Overlay,
     pub now: u32,
+    /// Time since power-on, for the boot animation.
+    pub boot_elapsed: u32,
 }
 
 pub fn gesture_cfg(top: Screen, ride: &ride::RideScreen, popup: popup::Popup) -> GestureCfg {
@@ -130,12 +136,13 @@ pub fn render(f: &mut Frame, s: &Scene) {
         return popup::render(f, s.popup); // full screen, covers everything
     }
     match s.top {
-        Screen::Ride => s.ride.render(f, s.model),
+        Screen::Ride => s.ride.render(f, s.model, s.now),
         Screen::Pin => s.pin.render(f, s.now),
         Screen::Menu => s.menu.render(f, s.now),
         Screen::Confirm(c) => menu::render_confirm(f, c),
         Screen::Diag => diag::render(f, s.diag),
         Screen::Ble => menu::render_ble(f, &s.ble),
         Screen::Firmware => menu::render_firmware(f),
+        Screen::Boot => boot::render(f, s.boot_elapsed),
     }
 }

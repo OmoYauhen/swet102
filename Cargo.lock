@@ -59,6 +59,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
+name = "color_quant"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
+
+[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -224,6 +230,16 @@ name = "g2poly"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "312d2295c7302019c395cfb90dacd00a82a2eabd700429bba9c7a3f38dbbe11b"
+
+[[package]]
+name = "gif"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ae047235e33e2829703574b54fdec96bfbad892062d97fed2f76022287de61b"
+dependencies = [
+ "color_quant",
+ "weezl",
+]
 
 [[package]]
 name = "hashbrown"
@@ -531,7 +547,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "swet-assets"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "png",
@@ -540,9 +556,10 @@ dependencies = [
 
 [[package]]
 name = "swet-emu"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "gif",
  "minifb",
  "png",
  "swet-heart",
@@ -551,18 +568,18 @@ dependencies = [
 
 [[package]]
 name = "swet-fw"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "swet-heart",
 ]
 
 [[package]]
 name = "swet-heart"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "swet-sim"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "png",
  "rqrr",
@@ -695,6 +712,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "weezl"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "winapi"

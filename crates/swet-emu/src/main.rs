@@ -10,6 +10,7 @@
 //! the whole emulator view (display + panel) to a PNG.
 
 mod canvas;
+mod record;
 
 use std::time::{Duration, Instant};
 
@@ -75,6 +76,9 @@ fn main() {
     {
         return snapshot(&path, w, h);
     }
+    if let Some(path) = std::env::args().find_map(|a| a.strip_prefix("--gif=").map(String::from)) {
+        return demo_gif(&path);
+    }
     let mut window = match Window::new("swet102 emulator", w, h, WindowOptions::default()) {
         Ok(win) => win,
         Err(e) => {
@@ -94,7 +98,9 @@ fn main() {
             .and_then(|b| <[u8; swet_heart::STORE_LEN]>::try_from(b.as_slice()).ok())
     };
     let font = UiFont::load();
-    let mut sim = Sim::with_store(stored);
+    let mut sim = Sim::booting(stored); // with the boot animation, as on the bike
+    let mut gif: Option<record::Recorder> = None;
+    let mut gifs = 0u32;
     let mut persisted = stored;
     let mut buf = vec![0u32; w * h];
     let start = Instant::now();
@@ -164,6 +170,22 @@ fn main() {
         if once(Key::U) && sim.hal().ble.0 != 0 {
             sim.phone_write_control(swet_heart::blep::CONTROL_DFU);
         }
+        if once(Key::F11) {
+            match gif.take() {
+                Some(r) => report_gif(r),
+                None => {
+                    let path = std::path::PathBuf::from(format!("swet102-{gifs:03}.gif"));
+                    gifs += 1;
+                    match record::Recorder::create(&path) {
+                        Ok(r) => {
+                            eprintln!("recording {} (F11 stops)", path.display());
+                            gif = Some(r);
+                        }
+                        Err(e) => eprintln!("gif: {e}"),
+                    }
+                }
+            }
+        }
         if once(Key::F12) {
             let path = std::path::PathBuf::from(format!("swet102-{shot:03}.png"));
             match swet_sim::write_png(&sim.screen(), &path, SCALE as u32) {
@@ -177,6 +199,12 @@ fn main() {
         let target = start.elapsed().as_millis() as u32;
         while sim.now_ms() + config::TICK_MS <= target && !sim.hal().powered_off {
             sim.tick();
+            if let Some(r) = gif.as_mut()
+                && let Err(e) = r.push(&sim.screen(), sim.now_ms())
+            {
+                eprintln!("gif: {e}");
+                gif = None;
+            }
         }
 
         let sent = sim.app().blep().commands;
@@ -206,6 +234,9 @@ fn main() {
             break;
         }
         std::thread::sleep(Duration::from_millis(5));
+    }
+    if let Some(r) = gif {
+        report_gif(r);
     }
     if sim.hal().dfu_requested {
         eprintln!("swet-emu: the firmware rebooted into DFU mode (menu → Update)");
@@ -397,7 +428,7 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
     let ly = by + 52;
     c.fill(DISP_X, ly - 10, DISP_W, 1, FRAME);
     for (i, line) in [
-        "F12: PNG of the display     --fresh: start with empty flash",
+        "F12: PNG of the display   F11: GIF start / stop   --fresh: empty flash",
         "Dev-build PINs: city 1111, sport 2222",
         "Motor: B brake, X error 21, L link, W/S speed, E/D current, R/F battery",
         "Phone: C connect / disconnect (subscribed to everything), U sends DFU!",
@@ -466,4 +497,72 @@ fn snapshot(path: &str, w: usize, h: usize) {
             std::process::exit(1);
         }
     }
+}
+
+fn report_gif(r: record::Recorder) {
+    match r.finish() {
+        Ok(n) => eprintln!("gif saved ({n} frames)"),
+        Err(e) => eprintln!("gif: {e}"),
+    }
+}
+
+/// Headless: a scripted tour (boot, PAS, every page, pane slides) as a GIF.
+fn demo_gif(path: &str) {
+    let mut sim = Sim::booting(None);
+    sim.phone_connect();
+    sim.motor().set_speed_kmh(23);
+    sim.motor().current_x2 = 16;
+    let mut rec = match record::Recorder::create(std::path::Path::new(path)) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("swet-emu: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    run(
+        &mut sim,
+        &mut rec,
+        swet_heart::ui::boot::duration_ms() + 800,
+    );
+    for _ in 0..3 {
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 500); // PAS 1, 2, 3: the number slides
+    }
+    tap(&mut sim, &mut rec, Buttons::M, 1000); // Lights
+    tap(&mut sim, &mut rec, Buttons::RIGHT, 1000); // lights on
+    tap(&mut sim, &mut rec, Buttons::M, 1000); // Player
+    tap(&mut sim, &mut rec, Buttons::M, 1000); // Gate
+    tap(&mut sim, &mut rec, Buttons::PWR, 1000); // back to PAS
+    for _ in 0..2 {
+        // M double-click: the next info view slides up
+        tap(&mut sim, &mut rec, Buttons::M, 60);
+        tap(&mut sim, &mut rec, Buttons::M, 1200);
+    }
+    match rec.finish() {
+        Ok(n) => eprintln!("saved {path} ({n} frames)"),
+        Err(e) => {
+            eprintln!("swet-emu: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Run `ms` of firmware time, recording every changed frame.
+fn run(sim: &mut Sim, rec: &mut record::Recorder, ms: u32) {
+    let end = sim.now_ms() + ms;
+    while sim.now_ms() < end {
+        sim.tick();
+        if let Err(e) = rec.push(&sim.screen(), sim.now_ms()) {
+            eprintln!("swet-emu: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// A short press of `b`, then `after_ms` of nothing.
+fn tap(sim: &mut Sim, rec: &mut record::Recorder, b: u8, after_ms: u32) {
+    sim.press(b);
+    run(sim, rec, 80);
+    sim.release(b);
+    run(sim, rec, after_ms);
 }

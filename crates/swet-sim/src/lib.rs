@@ -127,7 +127,15 @@ impl Sim {
     }
 
     /// A powered-on display whose flash already holds `store`.
+    /// The boot animation is skipped: most tests start on the ride (or PIN) screen.
     pub fn with_store(store: Option<[u8; STORE_LEN]>) -> Self {
+        let mut s = Self::booting(store);
+        s.app.skip_boot();
+        s
+    }
+
+    /// Like [`Sim::with_store`], but showing the boot animation, as on the bike.
+    pub fn booting(store: Option<[u8; STORE_LEN]>) -> Self {
         let hal = SimHal {
             store,
             ..SimHal::default()
