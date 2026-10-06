@@ -350,14 +350,14 @@ impl Tween {
 - **Input during an animation:** a new button press (`Down`) first calls `snap()` on
   every active tween, then gets handled. Nothing queues. Only the press: the release
   of the double-click that started a pane slide must not cut it short.
-- **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then two rows, `SWET102`
-  over `v<version>`, in `TEXT` magnified by the largest scale that fits both
-  (`Frame::text_scaled`, `Font::ink_rows`; 2× today). They slide in from the right
-  (400 ms, ease-out), hold still for 1.2 s, and slide out to the left (400 ms,
-  ease-in): ≈ 2.6 s in all. A dev build drops the `v` (`0.1.0-dev` would not fit
-  otherwise). Then `Ride` or `Pin`. Popups wait until it ends, so a missing motor
-  shows the `--` screen right after it. Any button click skips it and does nothing
-  else.
+- **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then two rows of `TEXT`,
+  magnified: `SWET102` by the largest scale that fits (2× today), `v<version>` one
+  step smaller, and smaller still if it must, so the `v` always fits (1× today;
+  `Frame::text_scaled`, `Font::ink_rows`). They slide in from the right (400 ms,
+  ease-out), hold still for 1.2 s, and slide out to the left (400 ms, ease-in):
+  ≈ 2.6 s in all. Then `Ride` or `Pin`. Popups wait until it ends, so a missing
+  motor shows the `--` screen right after it. Any button click skips it and does
+  nothing else.
 - **Slides** (`ui/ride.rs`): all horizontal inside the tile: page 150 ms (in from
   the right on M, from the left on PWR back to PAS), PAS 100 ms (a higher level in
   from the right, a lower one from the left); info pane 200 ms, vertical (the old
@@ -1082,3 +1082,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-06 | M6: emulator GIF capture (F11; `--gif=FILE` records a scripted tour, `docs/demo.gif`); v0.1.0 with `make release` (real PINs only) |
 | 2026-10-07 | M6 (owner's review): boot text scaled to the full screen height (`Frame::text_scaled`, scroll 500 px/s); page slide horizontal, info pane slides vertically; draw order tile → pane → battery replaces the pane-push column clearing |
 | 2026-10-07 | M6 (owner's second look): boot in two rows (`SWET102` / version) that slide in, hold 1.2 s, slide out (the 500 px/s scroll was too fast to read); the PAS number slides horizontally like the pages (`tile_roll` gone) |
+| 2026-10-07 | M6: version row one scale step below the name (1× under 2×), so `v<version>` always fits; no more dropping the "v" in dev builds |
