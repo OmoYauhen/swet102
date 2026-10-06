@@ -250,6 +250,23 @@ pub fn render_firmware(f: &mut Frame) {
     }
 }
 
+/// Shown while rebooting into the bootloader's update mode, and left on the
+/// display while the bootloader runs: what to do on the phone, and how to get
+/// back afterwards.
+pub fn render_update(f: &mut Frame) {
+    draw_icon(f, &ICON_DOWNLOAD, 3, 14);
+    const TX: i32 = 42;
+    f.text(&TEXT, b"Update", TX, 2, 1, Mode::Set);
+    for (s, y) in [
+        (b"NRF TOOLBOX: DFU".as_slice(), 22),
+        (b"DEVICE SW102_DFU", 30),
+        (b"AFTER: POWER OFF,", 44),
+        (b"THEN HOLD PWR", 52),
+    ] {
+        f.text3x5(TX, y, s, 1, Mode::Set);
+    }
+}
+
 /// 16×16 icon as text art, drawn ×2.
 type Icon = [&'static [u8; 16]; 16];
 
