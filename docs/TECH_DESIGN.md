@@ -736,11 +736,23 @@ SS has **no** way into DFU from the app. Today it's entered with the bootloader'
 own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
 
 - **Menu "Reboot to DFU":**
-  1. Save and wait.
-  2. `hal_reboot_to_dfu()`, which does `sd_power_gpregret_set(0xB1)` and then `sd_nvic_SystemReset()`.
+  1. Save and wait; show the **Update** screen (what to do on the phone, and how to
+     get back) and flush it, so it is what the OLED keeps while the bootloader runs.
+  2. `hal_reboot_to_dfu()` (`platform/nrf51/dfu.c`): set `enter_buttonless_dfu = 1`
+     in the bootloader settings page and reset.
 
-  Verify that casainho's bootloader honours GPREGRET (§16). If it doesn't, the menu
-  item shows "hold M+PWR 8 s" instead.
+  casainho's bootloader is the **SDK 12 secure bootloader**, which ignores GPREGRET
+  (the 0xB1 convention is SDK 11; on hardware it just reset into the app, and the
+  dropped power latch switched the display off). SDK 12's `nrf_dfu_enter_check()`
+  enters DFU on its button or on that settings flag, and clears the flag itself.
+  The page (0x3FC00) is CRC-protected and a bad CRC makes the bootloader wipe it
+  (app marked invalid), so `dfu.c` only rewrites a page whose CRC checks out:
+  word 0 = CRC-32 of bytes 4..91, word 22 = the flag (SDK 12.3 `nrf_dfu_types.h`,
+  checked against `nrfutil settings generate` output). It disables the SoftDevice
+  and writes the page with the NVMC directly, then resets. Whether power and the
+  picture survive the reset depends on how fast the bootloader re-asserts the power
+  latch; if the display goes dark, the flag is still set and the next power-on
+  starts in update mode (§16).
 - **From the phone:** writing `"DFU!"` to the control characteristic does the same.
   It's only accepted after the wheel has been stopped for 5 s (`DFU_STOPPED_MS`;
   "stopped" includes no motor link). Any other write is ignored.
@@ -1022,7 +1034,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 1 | ~~RAM size~~ | **Resolved by the probe:** 32 KB (4 × 8 KB). The "QFAA = 16 KB" note was wrong. | — |
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
-| 4 | **GPREGRET DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | Write 0xB1 + reset, watch for `SW102_DFU` |
+| 4 | **DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | GPREGRET 0xB1: **failed** on hardware (SDK 12 ignores it; the display just turned off). Now the settings-page flag: menu → Update, watch for `SW102_DFU`, and whether the Update screen stays on |
 | 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0`, hardcoded in the LCD init sequence. | — |
 | 6 | **Walk-assist keep-alive** | Does the stock controller time out PAS 06? | Hold walk for 30 s on the stand |
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
@@ -1083,3 +1095,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-07 | M6 (owner's review): boot text scaled to the full screen height (`Frame::text_scaled`, scroll 500 px/s); page slide horizontal, info pane slides vertically; draw order tile → pane → battery replaces the pane-push column clearing |
 | 2026-10-07 | M6 (owner's second look): boot in two rows (`SWET102` / version) that slide in, hold 1.2 s, slide out (the 500 px/s scroll was too fast to read); the PAS number slides horizontally like the pages (`tile_roll` gone) |
 | 2026-10-07 | M6: version row one scale step below the name (1× under 2×), so `v<version>` always fits; no more dropping the "v" in dev builds |
+| 2026-10-07 | DFU entry: GPREGRET 0xB1 did nothing on hardware (SDK 12 bootloader); now `enter_buttonless_dfu` in the CRC-checked settings page, written with the SoftDevice off; the Update screen is flushed before the reset so the OLED keeps it |

@@ -104,6 +104,9 @@ pub struct App<H: Hal> {
     /// Power-on time and the screen the boot animation hands over to.
     boot_t0: u32,
     boot_then: Screen,
+    /// The update-mode screen has reached the display: only then reboot,
+    /// so it is what stays on the OLED while the bootloader runs.
+    update_shown: bool,
 }
 
 impl<H: Hal> App<H> {
@@ -160,6 +163,7 @@ impl<H: Hal> App<H> {
             last_moving: 0,
             boot_t0: 0,
             boot_then: Screen::Ride,
+            update_shown: false,
         }
     }
 
@@ -260,7 +264,8 @@ impl<H: Hal> App<H> {
         let overlay = match self.power {
             Power::On => Overlay::None,
             Power::Locking { .. } => Overlay::Padlock,
-            Power::Off { .. } | Power::Dfu { .. } => Overlay::Dark,
+            Power::Off { .. } => Overlay::Dark,
+            Power::Dfu { .. } => Overlay::Update,
         };
         let scene = Scene {
             top: self.stack.top(),
@@ -281,6 +286,8 @@ impl<H: Hal> App<H> {
             self.sent.clone_from(&self.frame);
             self.sent_valid = true;
         }
+        // the frame just flushed (or still on the display) is the update screen
+        self.update_shown = overlay == Overlay::Update;
     }
 
     fn telemetry(&self, now: u32) -> Telemetry {
@@ -424,8 +431,9 @@ impl<H: Hal> App<H> {
                 }
             }
             Power::Dfu { since } => {
-                if self.saver.idle(&self.hal)
-                    || now.wrapping_sub(since) >= config::SAVE_BEFORE_OFF_MS
+                if self.update_shown
+                    && (self.saver.idle(&self.hal)
+                        || now.wrapping_sub(since) >= config::SAVE_BEFORE_OFF_MS)
                 {
                     self.hal.reboot_to_dfu();
                 }
