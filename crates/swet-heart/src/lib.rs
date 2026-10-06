@@ -101,6 +101,9 @@ pub struct App<H: Hal> {
     now: u32,
     /// Last tick with the wheel turning.
     last_moving: u32,
+    /// Power-on time and the screen the boot animation hands over to.
+    boot_t0: u32,
+    boot_then: Screen,
 }
 
 impl<H: Hal> App<H> {
@@ -155,6 +158,8 @@ impl<H: Hal> App<H> {
             contrast: 0,
             now: 0,
             last_moving: 0,
+            boot_t0: 0,
+            boot_then: Screen::Ride,
         }
     }
 
@@ -171,9 +176,13 @@ impl<H: Hal> App<H> {
         self.state.locked = self.rec.locked;
         self.rides.load(&self.rec);
         self.saved = self.settings();
-        if self.state.locked {
-            self.stack.reset(Screen::Pin);
-        }
+        self.boot_then = if self.state.locked {
+            Screen::Pin
+        } else {
+            Screen::Ride
+        };
+        self.boot_t0 = now;
+        self.stack.reset(Screen::Boot);
         self.last_activity = now;
         self.last_moving = now;
         self.now = now;
@@ -186,12 +195,17 @@ impl<H: Hal> App<H> {
         // 1. input (ignored once power-off has started)
         let raw = self.hal.buttons();
         self.last_buttons = raw;
-        let cfg = ui::gesture_cfg(self.stack.top(), &self.ride, self.popups.shown());
+        let cfg = ui::gesture_cfg(self.stack.top(), &self.ride, self.popup_shown());
         let events = self.input.poll(raw, now, cfg);
         if self.power == Power::On {
             for ev in events.iter() {
                 self.dispatch(ev, now);
             }
+        }
+        if self.stack.top() == Screen::Boot
+            && now.wrapping_sub(self.boot_t0) >= ui::boot::duration_ms()
+        {
+            self.end_boot();
         }
 
         // 2. motor: push the wanted state, then run the bus. No assist while
@@ -256,9 +270,10 @@ impl<H: Hal> App<H> {
             ble: self.ble_info(),
             model: &model,
             diag: &diag,
-            popup: self.popups.shown(),
+            popup: self.popup_shown(),
             overlay,
             now,
+            boot_elapsed: now.wrapping_sub(self.boot_t0),
         };
         ui::render(&mut self.frame, &scene);
         if !self.sent_valid || self.frame != self.sent {
@@ -299,6 +314,28 @@ impl<H: Hal> App<H> {
                 max_x10: r.odo_max_x10,
                 ..rides::Trip::ZERO
             },
+        }
+    }
+
+    /// The boot animation is over (or skipped): show the riding screen, or
+    /// the PIN screen when locked.
+    fn end_boot(&mut self) {
+        self.stack.reset(self.boot_then);
+    }
+
+    /// Skip the boot animation (simulator: most tests start on the ride screen).
+    pub fn skip_boot(&mut self) {
+        if self.stack.top() == Screen::Boot {
+            self.end_boot();
+        }
+    }
+
+    /// Popups wait until the boot animation is over.
+    fn popup_shown(&self) -> Popup {
+        if self.stack.top() == Screen::Boot {
+            Popup::None
+        } else {
+            self.popups.shown()
         }
     }
 
@@ -429,7 +466,13 @@ impl<H: Hal> App<H> {
             self.power_off(now);
             return;
         }
-        match self.popups.shown() {
+        // Input never waits behind an animation (PRODUCT §3.4): a new press
+        // snaps it to its end. Only the press: the release of the double-click
+        // that started a pane push must not cut it short.
+        if ev.g == Down {
+            self.ride.snap();
+        }
+        match self.popup_shown() {
             Popup::None => {}
             // the error screen takes all input; M acknowledges it
             Popup::Fault(_) => {
@@ -448,15 +491,21 @@ impl<H: Hal> App<H> {
         }
         match self.stack.top() {
             Screen::Ride => match (ev.btn, ev.g) {
-                (Btn::M, Click) => self.ride.next_page(),
-                (Btn::M, Double) => self.ride.next_view(),
+                (Btn::M, Click) => {
+                    let m = self.model();
+                    self.ride.next_page(&m, now);
+                }
+                (Btn::M, Double) => self.ride.next_view(now),
                 (Btn::M, Hold) => {
                     self.menu.open();
                     self.stack.push(Screen::Menu);
                 }
-                (Btn::Pwr, Click) => self.ride.goto_pas(),
+                (Btn::Pwr, Click) => {
+                    let m = self.model();
+                    self.ride.goto_pas(&m, now);
+                }
                 (Btn::Pwr, Double) => self.lock(now),
-                (Btn::Left | Btn::Right, _) => self.page_event(ev),
+                (Btn::Left | Btn::Right, _) => self.page_event(ev, now),
                 _ => {}
             },
             Screen::Menu => match (ev.btn, ev.g) {
@@ -491,6 +540,12 @@ impl<H: Hal> App<H> {
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
             },
+            // any button skips the boot animation; the press does nothing else
+            Screen::Boot => {
+                if ev.g == Click {
+                    self.end_boot();
+                }
+            }
             Screen::Diag | Screen::Ble | Screen::Firmware => {
                 if (ev.btn, ev.g) == (Btn::Pwr, Click) {
                     self.stack.pop();
@@ -525,10 +580,16 @@ impl<H: Hal> App<H> {
         self.state.locked = false;
         self.saver.now(now);
         self.stack.reset(Screen::Ride);
-        self.ride.goto_pas();
+        self.ride.reset_to_pas();
     }
 
-    fn page_event(&mut self, ev: Event) {
+    fn page_event(&mut self, ev: Event, now: u32) {
+        let pas = self.state.pas;
+        self.page_command(ev);
+        self.ride.roll_pas(pas, self.state.pas, now);
+    }
+
+    fn page_command(&mut self, ev: Event) {
         use Gesture::*;
         let s = &mut self.state;
         // Walk assist ends with its hold whatever page is showing by then
@@ -660,7 +721,12 @@ impl<H: Hal> App<H> {
     }
 
     pub fn popup(&self) -> Popup {
-        self.popups.shown()
+        self.popup_shown()
+    }
+
+    /// A page slide, PAS roll or pane push is running.
+    pub fn animating(&self) -> bool {
+        self.ride.animating(self.now)
     }
 
     pub fn page(&self) -> Page {

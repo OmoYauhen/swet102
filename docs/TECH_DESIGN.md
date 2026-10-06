@@ -347,11 +347,18 @@ impl Tween {
 
 - **Page and pane slides:** render the old and new content with an offset,
   clipped to the widget rect. Both are rendered **live** each frame.
-- **Input during an animation:** any input event first calls `snap()` on every
-  active tween, then gets handled. Nothing queues.
-- **Boot:** the sparkles show for 600 ms, then `SWET102 v<version>` scrolls at
-  ~2 px/frame until it's off screen. After that it waits for motor link-up. Any
-  button skips ahead.
+- **Input during an animation:** a new button press (`Down`) first calls `snap()` on
+  every active tween, then gets handled. Nothing queues. Only the press: the release
+  of the double-click that started a pane push must not cut it short.
+- **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then `SWET102 v<version>`
+  scrolls in from the right at 150 px/s (3 px/frame) until it's off screen, ≈ 2.3 s
+  in all. Then `Ride` or `Pin`. Popups wait until it ends, so a missing motor shows
+  the `--` screen right after it. Any button click skips it and does nothing else.
+- **Slides** (`ui/ride.rs`): page 150 ms (up on M, down on PWR back to PAS), PAS
+  roll 100 ms (up when the level rises), pane push 200 ms. The tile spans the full
+  screen height, so a glyph sliding past it falls off screen; during a pane push the
+  pane is drawn first and the tile and battery columns are cleared and redrawn over
+  it.
 
 ### 5.5 Event routing
 
@@ -362,7 +369,7 @@ goes through one fixed chain, and the first handler that matches consumes it:
 | Step | Handler | Takes |
 |---|---|---|
 | 1 | **Global** | PWR `Hold` → power off (any screen); PWR `Double` → lock + off (ride screen only) |
-| 2 | **Animations** | nothing; every input first calls `snap()` on running tweens (§5.4) |
+| 2 | **Animations** | nothing; a new press (`Down`) first calls `snap()` on running tweens (§5.4) |
 | 3 | **Popup**, if shown | everything: M dismisses an error, any button dismisses the battery-trip message |
 | 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
 | 5 | **Ride → current page** | the ride screen keeps M (page ring, pane ring, menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Lights, Player, Gate) |
@@ -875,10 +882,12 @@ fn m_double_click_switches_pane_without_switching_page() {
   - `SWET_PIN_CITY` and `SWET_PIN_SPORT` must each be 4 digits and must differ;
     `swet-heart`'s `build.rs` fails the build otherwise.
   - If unset outside a release build, the dev PINs `1111`/`2222` apply and the
-    version gets `-dev` (`SWET102 v0.0.1-dev`).
+    version gets `-dev` (`SWET102 v0.1.0-dev`).
   - **`make release` refuses dev PINs.**
 - **Version:**
-  - `VERSION_STRING` is semantic (`0.0.1`).
+  - `VERSION_STRING` is semantic (`0.1.0` = first daily-use release, M6).
+  - `make release` = `check` + `dfu` with the real PINs; it refuses `DEV_PINS`. Tag the
+    commit `vX.Y.Z` by hand; the zip holds the PINs and is never published.
   - `VERSION_NUM` is the DFU application version, date-based `YYMMDDNN`. The
     resident bootloader has downgrade prevention, and the device is currently at version 200.
 - **DFU zip:** `nrfutil pkg generate --application app.hex --key-file prebuilt/private.key --application-version $(VERSION_NUM) --hw-version 51 --sd-req 0x87`, the same as SS.
@@ -1061,3 +1070,6 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-05 | M5: `blep.rs` owns payloads and cadence; `hal_ble_notify` = set value + notify if subscribed; `BleState` bit3 = trips subscribed; trips records go one per tick; soc 0xFF = unknown |
 | 2026-10-05 | M5: `ble.c`: own advertising (fast 100 ms × 30 s → slow 1 s unlimited, fast again after a disconnect), flags + name in adv data, service UUID in scan response; `ble_conn_params` asks once after 5 s, never disconnects; DIS firmware rev from `swet_version()` (Rust) |
 | 2026-10-05 | M5: walk assist ends on LEFT release even when an M click switched the page during the hold |
+| 2026-10-06 | M6: `ui/anim.rs` Tween (Q8 ease-out, time-based, zero-initialised); page slide 150 ms, PAS roll 100 ms, pane push 200 ms; a new press (`Down`) snaps running tweens, not the release |
+| 2026-10-06 | M6: boot animation as a `Screen::Boot` base (sparkles 600 ms, version scroll 150 px/s, ≈ 2.3 s); popups wait for its end, so no motor → `--` after the boot rather than a frozen frame; a click skips it and is consumed. `Sim` skips it by default (`Sim::booting` keeps it) |
+| 2026-10-06 | M6: emulator GIF capture (F11; `--gif=FILE` records a scripted tour, `docs/demo.gif`); v0.1.0 with `make release` (real PINs only) |

@@ -10,6 +10,7 @@ swet-heart.workspace = true
 swet-sim.workspace = true
 minifb = { version = "0.29", default-features = false, features = ["x11"] }
 png = "0.18"
+gif = "0.13"
 ab_glyph = "0.2.32"
 
 [lints]

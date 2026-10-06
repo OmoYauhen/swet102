@@ -6,10 +6,13 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — what it does
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
-**Status:** M5 — riding screen with PAS, Lights, Player and Gate pages, motor bus,
-error screens, saved settings, lock with city/sport PINs, auto power-off, trips
-with max/avg/Ah, battery-trip message, menu, BLE (telemetry, trips, phone
-commands, DFU from the phone). Animations come in M6.
+**Status:** v0.1.0, the first daily-use release (M6): riding screen with PAS,
+Lights, Player and Gate pages, motor bus, error screens, saved settings, lock
+with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
+message, menu, BLE (telemetry, trips, phone commands, DFU from the phone), boot
+animation, page slides, PAS roll and info-pane push. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
+
+![swet102 demo: boot, PAS roll, pages, info pane](docs/demo.gif)
 
 ## Layout
 
@@ -57,12 +60,15 @@ state. Button and key chips light up while held.
 | L | motor link on / off |
 | C | phone connected + subscribed / gone |
 | U | the phone writes `DFU!` (needs a phone, wheel stopped 5 s) |
+| F11 | GIF of the display: start / stop (`swet102-NNN.gif`, real timing) |
 | F12 | PNG of the display |
 
 `--fresh` starts with empty flash (otherwise `emu-store.bin` is reused);
-`--snapshot=FILE.png` renders a short scripted ride to a PNG without a window.
+`--snapshot=FILE.png` renders a short scripted ride to a PNG without a window;
+`--gif=FILE.gif` records the scripted tour above (`docs/demo.gif`). The window
+starts with the boot animation, like the bike.
 
-## Using it (M5)
+## Using it
 
 The tile on the left is the **page**; LEFT / RIGHT act on it. M click goes to
 the next page (PAS → Lights → Player → Gate), PWR click jumps back to PAS.
@@ -113,7 +119,7 @@ The display keeps casainho's bootloader and S130. Firmware updates need a
 downgrades); `version.mk` makes it date-based.
 
 ```sh
-SWET_PIN_CITY=xxxx SWET_PIN_SPORT=yyyy make dfu   # build/swet102-<VERSION_NUM>.zip → nRF Toolbox → DFU
+SWET_PIN_CITY=xxxx SWET_PIN_SPORT=yyyy make release   # check + build/swet102-<VERSION_NUM>.zip → nRF Toolbox → DFU
 make flash-app  # over SWD (WCH-LinkE in DAP mode), keeps bootloader + S130
 ```
 
@@ -127,6 +133,22 @@ shows `-dev`; `make dfu` refuses that unless you add `DEV_PINS=1` for a bench bu
 
 `tools/nrfutil.sh` and `tools/openocd.sh` run nrfutil 6.1.7 and OpenOCD in Docker
 (nrfutil needs Python < 3.11; raw USB needs root on NixOS).
+
+### Before relying on a release
+
+The hardware checks from TECH_DESIGN §16 that the emulator can't answer:
+
+- [ ] **City limit:** bike on a stand in city mode, assist must cut out at 25 km/h
+  (if it's ~32, flip `SPEED_LIMIT_AS_RPM` in `config.rs`).
+- [ ] **Walk assist:** hold it for 30 s; if the motor stops after a while, set
+  `WALK_KEEPALIVE_MS`.
+- [ ] **Menu → Update** and `tools/ble-phone.py --dfu` both bring up `SW102_DFU`.
+- [ ] **BLE:** the display boots with the GATT service, the app (or
+  `tools/ble-phone.py`) gets telemetry, Player and Gate presses arrive.
+- [ ] **Lights** switch the motor light and dim the screen.
+- [ ] Diagnostics screen: `TICK US` average stays well under 20 000 while pages and
+  panes slide (late frames only skip, but smooth slides need the headroom).
+- [ ] A smoke ride, then `git tag v0.1.0`.
 
 ## Menu (M hold)
 

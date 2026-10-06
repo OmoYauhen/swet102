@@ -20,7 +20,7 @@
       let
         pkgs = import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; };
         lib = pkgs.lib;
-        version = "0.0.1";
+        version = "0.1.0";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         rustPlatform = pkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; };

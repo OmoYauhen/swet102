@@ -3,6 +3,7 @@
 #   make            build/swet102.hex (app only) + size report
 #   make check      size gates: fits the app region, no core::fmt in the image
 #   make dfu        signed OTA zip (needs NRFUTIL; SWET_PIN_CITY/SWET_PIN_SPORT or DEV_PINS=1)
+#   make release    check + dfu with the real PINs only (refuses DEV_PINS)
 #   make full       bootloader + S130 + app + settings, for SWD   (needs NRFUTIL)
 #   make flash-full mass-erase and write the full image over SWD  (needs OPENOCD)
 #
@@ -105,7 +106,7 @@ LDFLAGS  := $(ARCH) -Tplatform/nrf51/swet102.ld -L$(SDK_ROOT)/components/toolcha
 PLATFORM_OBJ := $(PLATFORM_SRC:%.c=$(BUILD)/%.o)
 SDK_OBJ      := $(SDK_SRC:%.c=$(BUILD)/sdk/%.o) $(SDK_ASM:%.S=$(BUILD)/sdk/%.o)
 
-.PHONY: all check check-pins dfu full flash-full flash-app clean FORCE
+.PHONY: all check check-pins dfu release full flash-full flash-app clean FORCE
 all: $(OUT).hex
 
 $(RUST_LIB): FORCE
@@ -155,6 +156,16 @@ endif
 dfu: check-pins $(OUT).hex
 	$(NRFUTIL) pkg generate --application $(OUT).hex --key-file $(KEYFILE) \
 	  --application-version $(VERSION_NUM) --hw-version 51 --sd-req 0x87 $(OUT)-$(VERSION_NUM).zip
+
+# A daily-use release: the real PINs only (DEV_PINS is refused), the size and
+# .bss gates, then the signed zip. Tag the commit vX.Y.Z by hand; the zip holds
+# the PINs, so it is never published (TECH_DESIGN §12).
+release:
+ifdef DEV_PINS
+	$(error make release refuses DEV_PINS: set SWET_PIN_CITY and SWET_PIN_SPORT)
+endif
+	$(MAKE) check dfu
+	@echo "release $(VERSION_STRING) ($(VERSION_NUM)): $(OUT)-$(VERSION_NUM).zip"
 
 $(BUILD)/settings.hex: $(OUT).hex
 	$(NRFUTIL) settings generate --no-backup --family NRF51 --application $< \

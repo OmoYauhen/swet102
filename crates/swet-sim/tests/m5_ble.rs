@@ -16,14 +16,15 @@ fn riding(kmh: u32) -> Sim {
     s
 }
 
-/// M short until `page` is showing (each click waits out the double-click window).
+/// M short until `page` is showing (each click waits out the double-click
+/// window and the 150 ms page slide).
 fn goto(s: &mut Sim, page: Page) {
     for _ in 0..4 {
         if s.app().page() == page {
             return;
         }
         s.click(Buttons::M);
-        s.run_ms(config::DBL_MS + 40);
+        s.run_ms(config::DBL_MS + 200);
     }
     panic!("page {page:?} not reached");
 }
@@ -49,7 +50,7 @@ fn m_cycles_pas_lights_player_gate_and_pwr_jumps_back_to_pas() {
     let mut seen = vec![s.app().page()];
     for _ in 0..4 {
         s.click(Buttons::M);
-        s.run_ms(config::DBL_MS + 40);
+        s.run_ms(config::DBL_MS + 200);
         seen.push(s.app().page());
     }
     assert_eq!(
@@ -59,7 +60,7 @@ fn m_cycles_pas_lights_player_gate_and_pwr_jumps_back_to_pas() {
 
     goto(&mut s, Page::Gate);
     s.click(Buttons::PWR);
-    s.run_ms(config::DBL_MS + 40);
+    s.run_ms(config::DBL_MS + 200);
     assert_eq!(s.app().page(), Page::Pas);
 }
 
@@ -134,10 +135,10 @@ fn player_sends_volume_tracks_and_play_pause() {
     s.click(Buttons::LEFT); // volume −
     s.hold(Buttons::LEFT, 1200); // previous track
     s.click(Buttons::RIGHT); // volume +, after the double-click window
-    s.run_ms(config::DBL_MS + 40);
+    s.run_ms(config::DBL_MS + 200);
     s.hold(Buttons::RIGHT, 1200); // next track
     s.double_click(Buttons::RIGHT); // play / pause
-    s.run_ms(config::DBL_MS + 40);
+    s.run_ms(config::DBL_MS + 200);
 
     assert_eq!(
         commands(&s),
@@ -331,7 +332,7 @@ fn walk_assist_ends_on_release_even_after_a_page_switch() {
     s.run_ms(1200);
     assert!(s.app().state().walk);
     s.click(Buttons::M);
-    s.run_ms(config::DBL_MS + 40);
+    s.run_ms(config::DBL_MS + 200);
     assert_eq!(s.app().page(), Page::Lights);
     s.release(Buttons::LEFT);
     s.run_ms(100);
