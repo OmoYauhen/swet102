@@ -13,9 +13,6 @@
 #include "nrf_nvic.h"
 #include "nrf_soc.h"
 
-/* SDK 12 bootloader: GPREGRET value that makes it stay in DFU mode. */
-#define BOOTLOADER_DFU_START 0xB1
-
 static void uart_evt(app_uart_evt_t *evt)
 {
     if (evt->evt_type == APP_UART_COMMUNICATION_ERROR ||
@@ -86,7 +83,7 @@ int16_t hal_uart_read(void)
     return app_uart_get(&b) == NRF_SUCCESS ? b : -1;
 }
 
-/* hal_store_* live in store.c (FDS), hal_ble_* in ble.c. */
+/* hal_store_* live in store.c (FDS), hal_ble_* in ble.c, hal_reboot_to_dfu in dfu.c. */
 
 void hal_power_off(void)
 {
@@ -94,13 +91,6 @@ void hal_power_off(void)
     for (;;) {
         /* the regulator drops out; the watchdog covers a stuck latch */
     }
-}
-
-void hal_reboot_to_dfu(void)
-{
-    (void)sd_power_gpregret_set(BOOTLOADER_DFU_START);
-    (void)sd_nvic_SystemReset();
-    for (;;) {}
 }
 
 uint32_t hal_diag(uint8_t id)

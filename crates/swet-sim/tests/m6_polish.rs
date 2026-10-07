@@ -158,3 +158,24 @@ fn fast_pas_taps_do_not_queue_behind_the_slide() {
     s.run_ms(u32::from(ride::PAS_SLIDE_MS));
     assert!(!s.app().animating());
 }
+
+#[test]
+fn reboot_to_dfu_leaves_the_update_screen_on_the_display() {
+    let mut s = riding(0);
+    s.hold(Buttons::M, 1200); // menu
+    for _ in 0..4 {
+        if s.app().menu_item() == swet_heart::ui::menu::Item::Dfu {
+            break;
+        }
+        s.click(Buttons::LEFT);
+    }
+    s.click(Buttons::M); // "Reboot to DFU?"
+    s.press(Buttons::M); // yes
+    s.run_ms(40);
+    s.release(Buttons::M);
+    until(&mut s, |s| s.app().power() != swet_heart::Power::On);
+    assert!(!s.hal().dfu_requested, "not before the screen is up");
+    s.run_ms(config::SAVE_BEFORE_OFF_MS + 100);
+    assert!(s.hal().dfu_requested);
+    s.assert_screen("m6_update_mode"); // the last frame sent: what the OLED keeps
+}

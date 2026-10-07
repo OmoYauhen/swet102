@@ -97,6 +97,10 @@ pub enum Overlay {
     None,
     Padlock,
     Dark,
+    /// Rebooting into the bootloader's update mode: what to do next. The
+    /// bootloader doesn't drive the OLED, so this stays on screen while it
+    /// keeps power.
+    Update,
 }
 
 /// Everything one frame needs.
@@ -129,6 +133,7 @@ pub fn render(f: &mut Frame, s: &Scene) {
     f.clear();
     match s.overlay {
         Overlay::Dark => return,
+        Overlay::Update => return menu::render_update(f),
         Overlay::Padlock => return pin::render_padlock(f),
         Overlay::None => {}
     }
