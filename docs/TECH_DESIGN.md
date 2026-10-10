@@ -735,28 +735,31 @@ dithered). `seq` increments per command, so the app can drop duplicates.
 SS has **no** way into DFU from the app. Today it's entered with the bootloader's
 own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
 
-- **Menu "Reboot to DFU":**
-  1. Save and wait; show the **Update** screen (what to do on the phone, and how to
-     get back) and flush it, so it is what the OLED keeps while the bootloader runs.
-  2. `hal_reboot_to_dfu()` (`platform/nrf51/dfu.c`): set `enter_buttonless_dfu = 1`
-     in the bootloader settings page and reset.
-
-  casainho's bootloader is the **SDK 12 secure bootloader**, which ignores GPREGRET
-  (the 0xB1 convention is SDK 11; on hardware it just reset into the app, and the
-  dropped power latch switched the display off). SDK 12's `nrf_dfu_enter_check()`
-  enters DFU on its button or on that settings flag, and clears the flag itself.
-  The page (0x3FC00) is CRC-protected and a bad CRC makes the bootloader wipe it
-  (app marked invalid), so `dfu.c` only rewrites a page whose CRC checks out:
-  word 0 = CRC-32 of bytes 4..91, word 22 = the flag (SDK 12.3 `nrf_dfu_types.h`,
-  checked against `nrfutil settings generate` output). It disables the SoftDevice
-  and writes the page with the NVMC directly, then resets. Whether power and the
-  picture survive the reset depends on how fast the bootloader re-asserts the power
-  latch; if the display goes dark, the flag is still set and the next power-on
-  starts in update mode (§16).
-- **From the phone:** writing `"DFU!"` to the control characteristic does the same.
-  It's only accepted after the wheel has been stopped for 5 s (`DFU_STOPPED_MS`;
-  "stopped" includes no motor link). Any other write is ignored.
-  `tools/ble-phone.py --dfu` does this from a PC.
+- **How casainho's bootloader enters DFU** (source:
+  github.com/geeksville/SW102_LCD_Bluetooth-bootloader, nRF5 SDK 12):
+  `nrf_dfu_enter_check()` returns true when **PWR is held (M not) for 5 s** from
+  its start, or when `enter_buttonless_dfu` is set in its settings page. Only
+  then does it set the power latch (P0.09). A reset releases our latch, so
+  unless PWR is held the board loses power before the bootloader gets that far.
+  It ignores GPREGRET (0xB1 is SDK 11).
+  - Tried on hardware and dropped: GPREGRET (display off, normal boot after)
+    and the settings flag (Update screen for a second, then off; the
+    bootloader had consumed the flag, so the next power-on was normal). The
+    flag route also risks a power cut during the bootloader's own rewrite of
+    the CRC-protected settings page, which would leave the app marked invalid.
+- **Menu → Update** opens the **Update** screen: "press and hold PWR for 5 s".
+  Any other button goes back.
+  1. **PWR down**: save (≤ 500 ms), draw the second Update screen ("keep holding
+     PWR for 5 s, then nRF Toolbox → DFU → SW102_DFU; after: off, then on") and
+     flush it, then `hal_reboot_to_dfu()` (`platform/nrf51/dfu.c`), a plain
+     reset. The rider is still holding PWR, which keeps the board powered.
+  2. The bootloader sees PWR held, and after 5 s enters DFU and latches power.
+     It doesn't drive the OLED, so the last frame should stay on screen.
+     Releasing PWR earlier just switches the display off; nothing is written.
+- **From the phone:** writing `"DFU!"` to the control characteristic opens the
+  same Update screen (the rider still holds PWR). It's only accepted after the
+  wheel has been stopped for 5 s (`DFU_STOPPED_MS`; "stopped" includes no motor
+  link). Any other write is ignored. `tools/ble-phone.py --dfu` does this from a PC.
 - **Security:** unauthenticated, and the DFU signing key is public
   (`prebuilt/private.key`). That's accepted, consistent with product §9.
 
@@ -1034,7 +1037,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 1 | ~~RAM size~~ | **Resolved by the probe:** 32 KB (4 × 8 KB). The "QFAA = 16 KB" note was wrong. | — |
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
-| 4 | **DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | GPREGRET 0xB1: **failed** on hardware (SDK 12 ignores it; the display just turned off). Now the settings-page flag: menu → Update, watch for `SW102_DFU`, and whether the Update screen stays on |
+| 4 | **DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | GPREGRET and the settings flag both **failed** (power latch drops on reset, §9.5). Now: Update screen, hold PWR 5 s through the reset → expect `SW102_DFU`, and see whether the screen stays on |
 | 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0`, hardcoded in the LCD init sequence. | — |
 | 6 | **Walk-assist keep-alive** | Does the stock controller time out PAS 06? | Hold walk for 30 s on the stand |
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
@@ -1096,3 +1099,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-07 | M6 (owner's second look): boot in two rows (`SWET102` / version) that slide in, hold 1.2 s, slide out (the 500 px/s scroll was too fast to read); the PAS number slides horizontally like the pages (`tile_roll` gone) |
 | 2026-10-07 | M6: version row one scale step below the name (1× under 2×), so `v<version>` always fits; no more dropping the "v" in dev builds |
 | 2026-10-07 | DFU entry: GPREGRET 0xB1 did nothing on hardware (SDK 12 bootloader); now `enter_buttonless_dfu` in the CRC-checked settings page, written with the SoftDevice off; the Update screen is flushed before the reset so the OLED keeps it |
+| 2026-10-11 | DFU entry: the settings-flag route also failed on hardware (the reset drops the power latch before the bootloader latches it; source: geeksville/SW102_LCD_Bluetooth-bootloader). Now Menu → Update asks the rider to hold PWR; on PWR down we save and reset, and the bootloader's own 5 s PWR-hold path enters DFU with the button keeping the board powered. No flash writes; `DFU!` from the phone opens the same screen |

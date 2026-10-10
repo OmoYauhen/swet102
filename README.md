@@ -142,7 +142,8 @@ The hardware checks from TECH_DESIGN §16 that the emulator can't answer:
   (if it's ~32, flip `SPEED_LIMIT_AS_RPM` in `config.rs`).
 - [ ] **Walk assist:** hold it for 30 s; if the motor stops after a while, set
   `WALK_KEEPALIVE_MS`.
-- [ ] **Menu → Update** and `tools/ble-phone.py --dfu` both bring up `SW102_DFU`.
+- [ ] **Menu → Update**, then hold PWR 5 s, brings up `SW102_DFU` (and `tools/ble-phone.py --dfu`
+  opens the same Update screen).
 - [ ] **BLE:** the display boots with the GATT service, the app (or
   `tools/ble-phone.py`) gets telemetry, Player and Gate presses arrive.
 - [ ] **Lights** switch the motor light and dim the screen.
@@ -160,7 +161,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Bluetooth | phone connected?, commands on?, the display's BLE address, commands sent / notifications dropped |
 | Diagnostics | the screen below |
 | Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
-| Update (DFU) | saves, then reboots into the bootloader's DFU mode (asks first) |
+| Update (DFU) | asks you to press and **hold PWR for 5 s**: on the press it saves and restarts, and the held button keeps the display powered until the bootloader is in DFU mode (`SW102_DFU`) |
 
 **Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
 by 10 % or more (and shows how far the last charge went), RIDE starts at 0 on
