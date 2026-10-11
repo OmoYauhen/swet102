@@ -52,7 +52,6 @@ impl Item {
 #[repr(u8)]
 pub enum Confirm {
     ResetTrip,
-    Dfu,
 }
 
 pub struct Menu {
@@ -138,7 +137,6 @@ impl Menu {
 pub fn render_confirm(f: &mut Frame, c: Confirm) {
     let q: &[u8] = match c {
         Confirm::ResetTrip => b"Reset trip?",
-        Confirm::Dfu => b"Reboot to DFU?",
     };
     f.text(&TEXT, q, (W - TEXT.width(q, 1)) / 2, 14, 1, Mode::Set);
     let hint = b"M = YES    PWR = NO";
@@ -250,19 +248,43 @@ pub fn render_firmware(f: &mut Frame) {
     }
 }
 
-/// Shown while rebooting into the bootloader's update mode, and left on the
-/// display while the bootloader runs: what to do on the phone, and how to get
-/// back afterwards.
-pub fn render_update(f: &mut Frame) {
+/// Update, step 1 (menu → Update, or `DFU!` from the phone): how to get into
+/// the bootloader's update mode. Its only way in that keeps the display
+/// powered is PWR held for 5 s from its start: the reset releases our power
+/// latch, and the held button keeps the board on until the bootloader sets
+/// it again (TECH_DESIGN §9.5).
+pub fn render_update_arm(f: &mut Frame) {
+    update_screen(
+        f,
+        &[
+            (b"PRESS AND HOLD PWR", 22),
+            (b"FOR 5 S TO START", 30),
+            (b"UPDATE MODE", 38),
+            (b"M: BACK", 54),
+        ],
+    );
+}
+
+/// Update, step 2: the last frame before the reset, so it is what the OLED
+/// keeps while PWR is held and the bootloader runs.
+pub fn render_update_hold(f: &mut Frame) {
+    update_screen(
+        f,
+        &[
+            (b"KEEP HOLDING PWR", 22),
+            (b"FOR 5 S, THEN:", 30),
+            (b"NRF TOOLBOX: DFU", 38),
+            (b"DEVICE SW102_DFU", 46),
+            (b"AFTER: OFF, THEN ON", 56),
+        ],
+    );
+}
+
+fn update_screen(f: &mut Frame, lines: &[(&[u8], i32)]) {
     draw_icon(f, &ICON_DOWNLOAD, 3, 14);
     const TX: i32 = 42;
     f.text(&TEXT, b"Update", TX, 2, 1, Mode::Set);
-    for (s, y) in [
-        (b"NRF TOOLBOX: DFU".as_slice(), 22),
-        (b"DEVICE SW102_DFU", 30),
-        (b"AFTER: POWER OFF,", 44),
-        (b"THEN HOLD PWR", 52),
-    ] {
+    for &(s, y) in lines {
         f.text3x5(TX, y, s, 1, Mode::Set);
     }
 }

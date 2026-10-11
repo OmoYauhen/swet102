@@ -524,7 +524,7 @@ impl<H: Hal> App<H> {
                     Item::Ble => Screen::Ble,
                     Item::Diagnostics => Screen::Diag,
                     Item::Firmware => Screen::Firmware,
-                    Item::Dfu => Screen::Confirm(Confirm::Dfu),
+                    Item::Dfu => Screen::Update,
                 }),
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
@@ -539,13 +539,20 @@ impl<H: Hal> App<H> {
                             self.saver.now(now);
                             self.menu.show_done(now);
                         }
-                        Confirm::Dfu => {
-                            self.saver.now(now);
-                            self.power = Power::Dfu { since: now };
-                        }
                     }
                 }
                 (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            // Update: the moment PWR goes down, save and reset while it is still
+            // held; held for 5 s, it takes the bootloader into update mode
+            // (TECH_DESIGN §9.5). Any other button goes back.
+            Screen::Update => match (ev.btn, ev.g) {
+                (Btn::Pwr, Down) => {
+                    self.saver.now(now);
+                    self.power = Power::Dfu { since: now };
+                }
+                (_, Click) => self.stack.pop(),
                 _ => {}
             },
             // any button skips the boot animation; the press does nothing else
@@ -687,18 +694,17 @@ impl<H: Hal> App<H> {
     }
 
     /// The phone wrote the control characteristic (TECH_DESIGN §9.5).
-    /// `"DFU!"` saves and reboots into the bootloader's DFU mode, like the
-    /// menu item, but only once the wheel has stood still for
-    /// `DFU_STOPPED_MS`: assist stops until the display is back. Anything
-    /// else is ignored.
+    /// `"DFU!"` opens the Update screen, like the menu item, once the wheel
+    /// has stood still for `DFU_STOPPED_MS`. The rider still has to hold PWR:
+    /// the bootloader can't keep the display powered across a reset on its
+    /// own (TECH_DESIGN §9.5). Anything else is ignored.
     pub fn ble_control(&mut self, data: &[u8]) {
-        let now = self.now;
         if data == blep::CONTROL_DFU
             && self.power == Power::On
-            && now.wrapping_sub(self.last_moving) >= config::DFU_STOPPED_MS
+            && self.now.wrapping_sub(self.last_moving) >= config::DFU_STOPPED_MS
+            && self.stack.top() != Screen::Update
         {
-            self.saver.now(now);
-            self.power = Power::Dfu { since: now };
+            self.stack.push(Screen::Update);
         }
     }
 

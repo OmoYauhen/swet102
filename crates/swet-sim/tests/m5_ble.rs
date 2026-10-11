@@ -5,7 +5,7 @@ use swet_heart::blep::{self, Command, TELEMETRY_LEN, TRIP_LEN};
 use swet_heart::ui::Screen;
 use swet_heart::ui::menu::Item;
 use swet_heart::ui::ride::Page;
-use swet_heart::{BleChannel, BleState, Buttons, Power, config};
+use swet_heart::{BleChannel, BleState, Buttons, config};
 use swet_sim::Sim;
 
 fn riding(kmh: u32) -> Sim {
@@ -300,26 +300,34 @@ fn trip_reset_sends_the_trip_record_at_once() {
 }
 
 #[test]
-fn dfu_from_the_phone_only_when_stopped_for_five_seconds() {
+fn dfu_from_the_phone_opens_the_update_screen_only_when_stopped_for_five_seconds() {
     let mut s = riding(20);
     s.phone_connect();
     s.phone_write_control(b"DFU!");
     s.run_ms(1000);
-    assert_eq!(s.app().power(), Power::On, "refused while riding");
+    assert_eq!(s.app().screen(), Screen::Ride, "refused while riding");
 
     s.motor().set_speed_kmh(0);
     s.run_ms(3000);
     s.phone_write_control(b"DFU!");
     s.run_ms(1000);
-    assert_eq!(s.app().power(), Power::On, "stopped for less than 5 s");
+    assert_eq!(s.app().screen(), Screen::Ride, "stopped for less than 5 s");
 
     s.run_ms(2000);
     s.phone_write_control(b"dfu?");
     s.run_ms(100);
-    assert_eq!(s.app().power(), Power::On, "anything else is ignored");
+    assert_eq!(s.app().screen(), Screen::Ride, "anything else is ignored");
 
-    let saves = s.app().saves();
     s.phone_write_control(b"DFU!");
+    s.tick();
+    assert_eq!(
+        s.app().screen(),
+        Screen::Update,
+        "the rider still has to hold PWR"
+    );
+    assert!(!s.hal().dfu_requested);
+    let saves = s.app().saves();
+    s.press(Buttons::PWR);
     s.run_ms(1000);
     assert!(s.hal().dfu_requested);
     assert!(s.app().saves() > saves, "saved before rebooting");
