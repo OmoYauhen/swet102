@@ -2,6 +2,7 @@
 
 use super::Model;
 use super::anim::{Tween, travel};
+use crate::blep::Command;
 use crate::gfx::assets::{SMALL, SPEED, W95};
 use crate::gfx::{Frame, H, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
@@ -86,6 +87,45 @@ impl View {
     }
 }
 
+/// A Player command, shown on the tile for a moment after it went out.
+/// `None` first, so the App stays zero-initialised.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum PlayerAction {
+    None,
+    VolumeUp,
+    VolumeDown,
+    NextTrack,
+    PrevTrack,
+    PlayPause,
+}
+
+impl PlayerAction {
+    pub fn of(c: Command) -> PlayerAction {
+        match c {
+            Command::VolumeUp => PlayerAction::VolumeUp,
+            Command::VolumeDown => PlayerAction::VolumeDown,
+            Command::NextTrack => PlayerAction::NextTrack,
+            Command::PrevTrack => PlayerAction::PrevTrack,
+            Command::PlayPause => PlayerAction::PlayPause,
+            Command::GateA | Command::GateB => PlayerAction::None,
+        }
+    }
+
+    fn art(self) -> Option<&'static Glyph> {
+        Some(match self {
+            PlayerAction::None => return None,
+            PlayerAction::VolumeUp => &VOL_UP,
+            PlayerAction::VolumeDown => &VOL_DOWN,
+            PlayerAction::NextTrack => &NEXT,
+            PlayerAction::PrevTrack => &PREV,
+            PlayerAction::PlayPause => &PLAY_PAUSE,
+        })
+    }
+}
+
+/// How long the action icon replaces the note.
+pub const ACTION_MS: u32 = 1000;
 /// What the page tile shows. Snapshotted when a slide starts, so the outgoing
 /// glyph stays what it was while the incoming one is live.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -95,6 +135,8 @@ enum TileGlyph {
     Walk,
     Lights(bool),
     Player,
+    /// What the Player page just sent, for `ACTION_MS` (replaces the note).
+    Action(PlayerAction),
     Gate,
 }
 
@@ -129,6 +171,9 @@ pub struct RideScreen {
     /// Info-pane slide: `pane_from` leaves at the top, `view` comes up from the bottom.
     pane: Tween,
     pane_from: View,
+    /// The last Player command and when it went out.
+    action: PlayerAction,
+    action_at: u32,
 }
 
 impl Default for RideScreen {
@@ -147,12 +192,15 @@ impl RideScreen {
             tile_back: false,
             pane: Tween::IDLE,
             pane_from: View::Speed,
+            action: PlayerAction::None,
+            action_at: 0,
         }
     }
 
     /// M click: next page, sliding in from the right.
     pub fn next_page(&mut self, m: &Model, now: u32) {
-        self.slide_tile(TileGlyph::of(self.page, m), false, PAGE_SLIDE_MS, now);
+        self.slide_tile(self.glyph(m, now), false, PAGE_SLIDE_MS, now);
+        self.action = PlayerAction::None;
         self.page = self.page.next();
     }
 
@@ -166,8 +214,28 @@ impl RideScreen {
     /// PWR click: back to PAS, sliding in from the left (the way back round the ring).
     pub fn goto_pas(&mut self, m: &Model, now: u32) {
         if self.page != Page::Pas {
-            self.slide_tile(TileGlyph::of(self.page, m), true, PAGE_SLIDE_MS, now);
+            self.slide_tile(self.glyph(m, now), true, PAGE_SLIDE_MS, now);
+            self.action = PlayerAction::None;
             self.page = Page::Pas;
+        }
+    }
+
+    /// A Player command went out: show its icon instead of the note for
+    /// `ACTION_MS` (so a press in the pocket-dark is confirmed at a glance).
+    pub fn show_action(&mut self, c: Command, now: u32) {
+        self.action = PlayerAction::of(c);
+        self.action_at = now;
+    }
+
+    /// The glyph the tile shows right now.
+    fn glyph(&self, m: &Model, now: u32) -> TileGlyph {
+        if self.page == Page::Player
+            && self.action != PlayerAction::None
+            && now.wrapping_sub(self.action_at) < ACTION_MS
+        {
+            TileGlyph::Action(self.action)
+        } else {
+            TileGlyph::of(self.page, m)
         }
     }
 
@@ -231,7 +299,7 @@ impl RideScreen {
     fn render_tile(&self, f: &mut Frame, m: &Model, now: u32) {
         let (x, y, w, h) = TILE;
         f.round_rect(x, y, w, h, 4, Mode::Set);
-        let current = TileGlyph::of(self.page, m);
+        let current = self.glyph(m, now);
         // Glyphs are drawn black (Clear) on the white tile: what slides past
         // the tile edge lands off screen or on black, where it leaves no trace.
         match self.tile.eased(now) {
@@ -274,6 +342,11 @@ fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32) {
         // ignore LEFT/RIGHT (PRODUCT §3.1)
         TileGlyph::Player => glyph(f, &NOTE, x + (w - GLYPH_W) / 2, y + 20, !m.commands),
         TileGlyph::Gate => glyph(f, &KEY, x + (w - GLYPH_W) / 2, y + 17, !m.commands),
+        TileGlyph::Action(a) => {
+            if let Some(art) = a.art() {
+                glyph(f, art, x + (w - GLYPH_W) / 2, y + 18, false);
+            }
+        }
     }
 }
 
@@ -530,3 +603,100 @@ fn bolt(f: &mut Frame, x: i32, y: i32) {
         }
     }
 }
+
+// Player action icons, shown for `ACTION_MS` after a command went out.
+
+const VOL_UP: Glyph = [
+    b"...........",
+    b"...........",
+    b"...#.......",
+    b"..##.......",
+    b"####....#..",
+    b"####....#..",
+    b"####..#####",
+    b"####....#..",
+    b"####....#..",
+    b"..##.......",
+    b"...#.......",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];
+
+const VOL_DOWN: Glyph = [
+    b"...........",
+    b"...........",
+    b"...#.......",
+    b"..##.......",
+    b"####.......",
+    b"####.......",
+    b"####..#####",
+    b"####.......",
+    b"####.......",
+    b"..##.......",
+    b"...#.......",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];
+
+const NEXT: Glyph = [
+    b"...........",
+    b"...........",
+    b"#....#....#",
+    b"##...##...#",
+    b"###..###..#",
+    b"####.####.#",
+    b"###########",
+    b"####.####.#",
+    b"###..###..#",
+    b"##...##...#",
+    b"#....#....#",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];
+
+const PREV: Glyph = [
+    b"...........",
+    b"...........",
+    b"#....#....#",
+    b"#...##...##",
+    b"#..###..###",
+    b"#.####.####",
+    b"###########",
+    b"#.####.####",
+    b"#..###..###",
+    b"#...##...##",
+    b"#....#....#",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];
+
+const PLAY_PAUSE: Glyph = [
+    b"...........",
+    b"...........",
+    b"#.....##.##",
+    b"##....##.##",
+    b"###...##.##",
+    b"####..##.##",
+    b"#####.##.##",
+    b"####..##.##",
+    b"###...##.##",
+    b"##....##.##",
+    b"#.....##.##",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+    b"...........",
+];

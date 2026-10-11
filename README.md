@@ -77,7 +77,7 @@ the next page (PAS → Lights → Player → Gate), PWR click jumps back to PAS.
 |---|---|---|
 | PAS (number) | PAS − (hold at 0: walk assist, tile shows ↑) | PAS + (0–9) |
 | Lights (bulb) | lights off | lights on; the screen dims while they're on |
-| Player (note) | click: volume −, hold: previous track | click: volume +, hold: next track, double-click: play / pause |
+| Player (note) | click: volume −, hold: previous track | click: volume +, hold: next track, double-click: play / pause; the tile shows the sent action for a second |
 | Gate (key) | gate A | gate B |
 
 Player and Gate send commands to the phone over BLE. Without a phone subscribed

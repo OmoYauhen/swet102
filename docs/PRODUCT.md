@@ -107,7 +107,7 @@ The screen is split into three columns:
 |---|---|---|---|
 | **PAS** | assist −1 | assist +1 | Shows the current level 0–9. Saved to EEPROM. **Hold LEFT at level 0 → walk assist** for as long as it's held. |
 | **Lights** | lights off | lights on | Uses the motor's light output. Screen brightness follows the light state (dimmer when lights are on). |
-| **Player** | click: volume −<br>hold: previous track | click: volume +<br>hold: next track<br>double-click: play / pause | Sent over BLE to the companion app. |
+| **Player** | click: volume −<br>hold: previous track | click: volume +<br>hold: next track<br>double-click: play / pause | Sent over BLE to the companion app. For a second after a command goes out, the tile shows what was sent (speaker −/+, skip back/forward, play/pause) instead of the note. |
 | **Gate** | open gate A | open gate B | Short presses, two gates. Sent over BLE to the companion app. |
 
 The page ring order is fixed at compile time. Pages that need BLE are shown as unavailable when no phone is connected.
@@ -610,3 +610,4 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-07 | Owner, after trying M6: boot text as tall as the screen (scroll 500 px/s, ≈ 2.1 s in all); page switch slides horizontally, info pane slides vertically (up). The PAS digit still rolls vertically |
 | 2026-10-07 | Owner, second look: boot text in two rows (SWET102 / version), slide in → hold 1.2 s → slide out (≈ 2.6 s in all; the scroll was too fast to read); the PAS number slides horizontally like the pages |
 | 2026-10-07 | Version row in smaller text than SWET102, so `v<version>` always fits (no dropped "v") |
+| 2026-10-11 | Player page: the tile shows the sent action (speaker −/+, skip back/forward, play/pause) for 1 s instead of the note; nothing when no phone took the command |
