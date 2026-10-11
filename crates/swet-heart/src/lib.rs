@@ -600,20 +600,26 @@ impl<H: Hal> App<H> {
 
     fn page_event(&mut self, ev: Event, now: u32) {
         let pas = self.state.pas;
-        self.page_command(ev);
+        if let Some(c) = self.page_command(ev)
+            // dropped when no phone listens: fire-and-forget (PRODUCT §9)
+            && self.blep.command(&mut self.hal, c)
+        {
+            self.ride.show_action(c, now);
+        }
         self.ride.slide_pas(pas, self.state.pas, now);
     }
 
-    fn page_command(&mut self, ev: Event) {
+    /// Handles the page's own buttons; returns the command for the phone, if any.
+    fn page_command(&mut self, ev: Event) -> Option<Command> {
         use Gesture::*;
         let s = &mut self.state;
         // Walk assist ends with its hold whatever page is showing by then
         // (an M click during the hold switches the page under it).
         if (ev.btn, ev.g) == (Btn::Left, HoldEnd) && s.walk {
             s.walk = false;
-            return;
+            return None;
         }
-        let command = match self.ride.page {
+        match self.ride.page {
             Page::Pas => {
                 match (ev.btn, ev.g) {
                     (Btn::Left, Click) => s.pas = s.pas.saturating_sub(1),
@@ -644,10 +650,6 @@ impl<H: Hal> App<H> {
                 (Btn::Right, Click) => Some(Command::GateB),
                 _ => None,
             },
-        };
-        // dropped when no phone listens: fire-and-forget (PRODUCT §9)
-        if let Some(c) = command {
-            self.blep.command(&mut self.hal, c);
         }
     }
 
