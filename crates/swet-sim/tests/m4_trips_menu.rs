@@ -124,7 +124,10 @@ fn menu_wraps_and_pwr_backs_out() {
     s.hold(Buttons::M, 1200);
     assert_eq!(s.app().menu_item(), Item::Lights, "opens at the first item");
     s.click(Buttons::LEFT);
+    assert_eq!(s.app().menu_item(), Item::Thanks);
+    s.click(Buttons::LEFT);
     assert_eq!(s.app().menu_item(), Item::Dfu);
+    s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);

@@ -8,6 +8,7 @@ pub mod menu;
 pub mod pin;
 pub mod popup;
 pub mod ride;
+pub mod thanks;
 
 use crate::gfx::Frame;
 use crate::input::GestureCfg;
@@ -33,6 +34,8 @@ pub enum Screen {
     Update,
     /// Menu → Lights: pick OFF / ON / AUTO.
     Lights,
+    /// Menu → Special thanks: the names, LEFT/RIGHT to step through them.
+    Thanks,
 }
 
 const DEPTH: usize = 4;
@@ -116,6 +119,7 @@ pub struct Scene<'a> {
     pub pin: &'a pin::PinEntry,
     pub menu: &'a menu::Menu,
     pub lights: &'a crate::lights::Lights,
+    pub thanks: &'a thanks::Thanks,
     pub ble: menu::BleInfo,
     pub model: &'a Model,
     pub diag: &'a diag::DiagData,
@@ -158,5 +162,6 @@ pub fn render(f: &mut Frame, s: &Scene) {
         Screen::Boot => boot::render(f, s.boot_elapsed),
         Screen::Update => menu::render_update_arm(f),
         Screen::Lights => menu::render_lights(f, s.menu.choice(), s.lights, s.now),
+        Screen::Thanks => s.thanks.render(f, s.now),
     }
 }

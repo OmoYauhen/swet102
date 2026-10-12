@@ -33,15 +33,16 @@ impl Tween {
         self.on = false;
     }
 
+    /// Milliseconds since the start while running, `None` once finished or
+    /// idle (for animations with their own curves, e.g. `ui/thanks.rs`).
+    pub fn elapsed(&self, now: u32) -> Option<u32> {
+        let t = now.wrapping_sub(self.t0);
+        (self.on && t < u32::from(self.dur)).then_some(t)
+    }
+
     /// Eased progress 0..=`ONE` while running, `None` once finished or idle.
     pub fn eased(&self, now: u32) -> Option<i32> {
-        if !self.on {
-            return None;
-        }
-        let t = now.wrapping_sub(self.t0);
-        if t >= u32::from(self.dur) {
-            return None;
-        }
+        let t = self.elapsed(now)?;
         let p = (t * ONE as u32 / u32::from(self.dur)) as i32; // 0..ONE linear
         let rest = ONE - p;
         Some(ONE - rest * rest / ONE)

@@ -28,6 +28,7 @@ use ui::menu::{BleInfo, Confirm, Item, Menu};
 use ui::pin::PinEntry;
 use ui::popup::{Fault, Popup, Popups};
 use ui::ride::{Page, RideScreen, View};
+use ui::thanks::Thanks;
 use ui::{Model, Overlay, Scene, Screen, Stack};
 
 /// Rider-controlled state. `pas`, `speed_limit` and `locked` are persisted.
@@ -80,6 +81,7 @@ pub struct App<H: Hal> {
     ride: RideScreen,
     pin: PinEntry,
     menu: Menu,
+    thanks: Thanks,
     /// Lights mode and the phone's time of day (RAM only, PRODUCT §3.5).
     lights: Lights,
     rides: Rides,
@@ -128,6 +130,7 @@ impl<H: Hal> App<H> {
             ride: RideScreen::new(),
             pin: PinEntry::new(),
             menu: Menu::new(),
+            thanks: Thanks::new(),
             lights: Lights::new(),
             rides: Rides::new(),
             seen_speed: 0,
@@ -282,6 +285,7 @@ impl<H: Hal> App<H> {
             pin: &self.pin,
             menu: &self.menu,
             lights: &self.lights,
+            thanks: &self.thanks,
             ble: self.ble_info(),
             model: &model,
             diag: &diag,
@@ -489,6 +493,7 @@ impl<H: Hal> App<H> {
         // that started a pane slide must not cut it short.
         if ev.g == Down {
             self.ride.snap();
+            self.thanks.snap();
         }
         match self.popup_shown() {
             Popup::None => {}
@@ -539,6 +544,10 @@ impl<H: Hal> App<H> {
                     Item::Diagnostics => Screen::Diag,
                     Item::Firmware => Screen::Firmware,
                     Item::Dfu => Screen::Update,
+                    Item::Thanks => {
+                        self.thanks.open(now);
+                        Screen::Thanks
+                    }
                 }),
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
@@ -551,6 +560,13 @@ impl<H: Hal> App<H> {
                     self.lights.pick(self.menu.choice());
                     self.stack.pop();
                 }
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            // the names: LEFT/RIGHT step (wrapping, each with the boot slides), PWR back
+            Screen::Thanks => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => self.thanks.step(false, now),
+                (Btn::Right, Click) => self.thanks.step(true, now),
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
             },
@@ -770,9 +786,14 @@ impl<H: Hal> App<H> {
         self.popup_shown()
     }
 
-    /// A page, PAS or info-pane slide is running.
+    /// A page, PAS or info-pane slide (or a Special thanks name) is running.
     pub fn animating(&self) -> bool {
-        self.ride.animating(self.now)
+        self.ride.animating(self.now) || self.thanks.animating(self.now)
+    }
+
+    /// The Special thanks screen's name, index into `ui::thanks::NAMES`.
+    pub fn thanks_index(&self) -> usize {
+        self.thanks.index()
     }
 
     pub fn page(&self) -> Page {

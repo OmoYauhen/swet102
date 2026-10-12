@@ -359,6 +359,11 @@ impl Tween {
   ≈ 2.6 s in all. Then `Ride` or `Pin`. Popups wait until it ends, so a missing
   motor shows the `--` screen right after it. Any button click skips it and does
   nothing else.
+- **Special thanks** (`ui/thanks.rs`): the boot's slides reused (`boot::slide_in`,
+  `boot::slide_out`, 400 ms each). Opening slides the first name in from the
+  right; a LEFT/RIGHT step slides the old name out, then the new one in (mirrored
+  for LEFT), on one `Tween` of 800 ms read through `Tween::elapsed`. A press
+  snaps it like the ride slides, so fast steps don't queue.
 - **Slides** (`ui/ride.rs`): all horizontal inside the tile: page 150 ms (in from
   the right on M, from the left on PWR back to PAS), PAS 100 ms (a higher level in
   from the right, a lower one from the left); info pane 200 ms, vertical (the old
@@ -379,7 +384,7 @@ goes through one fixed chain, and the first handler that matches consumes it:
 | 1 | **Global** | PWR `Hold` → power off (any screen); PWR `Double` → lock + off (ride screen only) |
 | 2 | **Animations** | nothing; a new press (`Down`) first calls `snap()` on running tweens (§5.4) |
 | 3 | **Popup**, if shown | everything: M dismisses an error, any button dismisses the battery-trip message |
-| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Lights`: L/R choice, M set, PWR cancel · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
+| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Lights`: L/R choice, M set, PWR cancel · `Thanks`: L/R name (wrapping), PWR back · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
 | 5 | **Ride → current page** | the ride screen keeps M (page ring, pane ring, menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Player, Gate) |
 
 ```rust
@@ -458,7 +463,12 @@ formatter, plus a decimal-point helper for `x_10` values.
   - labels: ~7 px, uppercase
   - tile number (PAS): **W95FA** (SIL OFL 1.1), rendered on its own 80-unit pixel grid and scaled ×4 → 20×36 px digits
   - popup/menu text: ~8–10 px
-- **Icons:** sparkles (from SS), bulb, music note, key, up arrow, padlock, circular
+  - Special thanks names: **W95FA** on its own pixel grid (`W95_NICK`: `@`, `_`,
+    a–z, 12 px tall with descenders), drawn ×2 with `Frame::text_scaled`, 1 font
+    pixel between glyphs. `@entropia_pl` is 52 px of ink + 11 gaps = 63 → 126 px
+    at 2× (1 px free each side); 3× would be 189. The scale is computed
+    (`thanks::scale`), like the boot's.
+- **Icons:** sparkles (from SS), bulb, heart (+ a small 9×8 one), music note, key, up arrow, padlock, circular
   arrow, Bluetooth, wrench, "i", download arrow, "!".
 
 ---
@@ -895,6 +905,8 @@ is powered off and started with a long PWR press (soft power latch).
 - **Real hold:** key-down and key-up map straight to press and release.
 - **Storage** lives in `emu-store.bin`. `--fresh` starts empty.
 - **`--motor-port=/dev/ttyUSB0`** talks to the real controller over a USB-UART, as SS does (`SS:serial.rs`).
+- **`--thanks=PREFIX`** (headless) opens Menu → Special thanks, steps through
+  every name and writes `PREFIX.gif` and `PREFIX-N.png` (one per name).
 
 ### 11.4 Tests
 
@@ -1139,3 +1151,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-11 | Player page: after a command goes out, the tile shows its icon for `ACTION_MS` (1 s) instead of the note (`RideScreen::show_action`, `PlayerAction`, zero-initialised); a page change ends it; nothing shows when no phone is subscribed |
 | 2026-10-12 | Lights page removed (`Page` = Pas, Player, Gate). `lights.rs`: `LightsMode` Off/On/Auto + `DayClock`, RAM only, zero-initialised (OFF, no time); menu item `Item::Lights` (first) opens `Screen::Lights` (L/R choice, M set, PWR cancel). `state.lights` is now derived every tick from `lights.on(now)` |
 | 2026-10-12 | Control message `T` (9 B: secs_of_day u32, sunset_min u16, sunrise_min u16; strict length and ranges) next to `DFU!`; the clock runs on the tick between syncs; AUTO = `t ≥ sunset − LIGHTS_LEAD_MIN (20) or t < sunrise`. The first valid sync after power-on switches to AUTO unless the rider already picked a mode. `ble.c` needs no change: the control value takes 20 B |
+| 2026-10-12 | Menu item `Item::Thanks` (last) opens `Screen::Thanks` (`ui/thanks.rs`, zero-initialised `Thanks`: index, previous index, direction, one `Tween`). The boot's slide curves are now `boot::slide_in` / `slide_out`, shared; `Tween::elapsed` gives the raw time for such two-phase animations. Names in W95FA from `swet-assets` (`W95_NICK`, native size, lowercase + `@` `_`), drawn ×2: the largest scale at which the longest name fits. The pixel-font rasteriser now draws glyphs 8 px right of the canvas edge (`PAD`), so ink left of the grid origin (the tail of `y`) is no longer clipped; `W95` comes out unchanged |

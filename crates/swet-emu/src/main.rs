@@ -7,7 +7,9 @@
 //! PWR hold powers off: the window closes once the save has landed.
 //!
 //! `--snapshot=FILE.png` runs a short scripted ride without a window and saves
-//! the whole emulator view (display + panel) to a PNG.
+//! the whole emulator view (display + panel) to a PNG. `--thanks=PREFIX`
+//! opens Menu → Special thanks and steps through the names: `PREFIX.gif`, and
+//! each name settled as `PREFIX-1.png`, `-2.png`, … (display only).
 
 mod canvas;
 mod record;
@@ -78,6 +80,11 @@ fn main() {
     }
     if let Some(path) = std::env::args().find_map(|a| a.strip_prefix("--gif=").map(String::from)) {
         return demo_gif(&path);
+    }
+    if let Some(prefix) =
+        std::env::args().find_map(|a| a.strip_prefix("--thanks=").map(String::from))
+    {
+        return thanks(&prefix);
     }
     let mut window = match Window::new("swet102 emulator", w, h, WindowOptions::default()) {
         Ok(win) => win,
@@ -394,6 +401,10 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
     );
     let screen = match app.screen() {
         swet_heart::ui::Screen::Menu => format!("Menu: {:?}", app.menu_item()),
+        swet_heart::ui::Screen::Thanks => format!(
+            "Thanks: {}",
+            String::from_utf8_lossy(swet_heart::ui::thanks::NAMES[app.thanks_index()])
+        ),
         s => format!("{s:?}"),
     };
     row(c, &mut y, "Screen", &screen);
@@ -575,6 +586,43 @@ fn demo_gif(path: &str) {
             eprintln!("swet-emu: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// Headless: from the ride screen, M hold → LEFT (the last item) → M opens
+/// Special thanks, then RIGHT through every name and back to the first.
+/// Records `PREFIX.gif` and saves each name, settled, as `PREFIX-N.png`.
+fn thanks(prefix: &str) {
+    use swet_heart::ui::thanks::NAMES;
+    let fail = |e: String| -> ! {
+        eprintln!("swet-emu: {e}");
+        std::process::exit(1);
+    };
+    let mut sim = Sim::new();
+    sim.boot_to_ride();
+    let gif = format!("{prefix}.gif");
+    let mut rec = record::Recorder::create(std::path::Path::new(&gif)).unwrap_or_else(|e| fail(e));
+    run(&mut sim, &mut rec, 600);
+    sim.press(Buttons::M);
+    run(&mut sim, &mut rec, 1200);
+    sim.release(Buttons::M);
+    run(&mut sim, &mut rec, 600);
+    tap(&mut sim, &mut rec, Buttons::LEFT, 800); // the ring wraps to Special thanks
+    tap(&mut sim, &mut rec, Buttons::M, 1600);
+    for n in 1..=NAMES.len() {
+        let png = format!("{prefix}-{n}.png");
+        swet_sim::write_png(
+            &sim.screen(),
+            std::path::Path::new(&png),
+            record::SCALE as u32,
+        )
+        .unwrap_or_else(|e| fail(e.to_string()));
+        eprintln!("saved {png}");
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 2000);
+    }
+    match rec.finish() {
+        Ok(n) => eprintln!("saved {gif} ({n} frames)"),
+        Err(e) => fail(e),
     }
 }
 
