@@ -8,6 +8,7 @@ pub mod config;
 pub mod gfx;
 pub mod hal;
 pub mod input;
+pub mod lights;
 pub mod motor;
 pub mod rides;
 pub mod store;
@@ -18,6 +19,7 @@ pub use hal::{BleChannel, BleState, Buttons, Diag, Hal, STORE_LEN};
 
 use blep::{Blep, Command, Telemetry, TripId, Trips};
 use input::{Btn, Event, Gesture, Input};
+use lights::Lights;
 use motor::{Motor, codec};
 use rides::{Rides, Sample};
 use store::{Record, Saver};
@@ -33,6 +35,8 @@ use ui::{Model, Overlay, Scene, Screen, Stack};
 pub struct State {
     pub pas: u8,
     pub walk: bool,
+    /// The effective light state, from the lights mode and the time of day
+    /// (`App::lights`); updated every tick, never persisted.
     pub lights: bool,
     /// km/h; set by the PIN that unlocked the bike (PRODUCT §6).
     pub speed_limit: u8,
@@ -76,6 +80,8 @@ pub struct App<H: Hal> {
     ride: RideScreen,
     pin: PinEntry,
     menu: Menu,
+    /// Lights mode and the phone's time of day (RAM only, PRODUCT §3.5).
+    lights: Lights,
     rides: Rides,
     /// Motor reading counters already handed to `rides`.
     seen_speed: u32,
@@ -122,6 +128,7 @@ impl<H: Hal> App<H> {
             ride: RideScreen::new(),
             pin: PinEntry::new(),
             menu: Menu::new(),
+            lights: Lights::new(),
             rides: Rides::new(),
             seen_speed: 0,
             seen_soc: 0,
@@ -213,7 +220,9 @@ impl<H: Hal> App<H> {
         }
 
         // 2. motor: push the wanted state, then run the bus. No assist while
-        // locked (PRODUCT §6).
+        // locked (PRODUCT §6). The lights follow their mode (and, in AUTO,
+        // the clock) every tick.
+        self.state.lights = self.lights.on(now);
         let pas_code = if self.state.locked {
             codec::pas_code(0)
         } else if self.state.walk {
@@ -272,6 +281,7 @@ impl<H: Hal> App<H> {
             ride: &self.ride,
             pin: &self.pin,
             menu: &self.menu,
+            lights: &self.lights,
             ble: self.ble_info(),
             model: &model,
             diag: &diag,
@@ -520,12 +530,27 @@ impl<H: Hal> App<H> {
                 (Btn::Left, Click) => self.menu.prev(),
                 (Btn::Right, Click) => self.menu.next(),
                 (Btn::M, Click) => self.stack.push(match self.menu.item() {
+                    Item::Lights => {
+                        self.menu.open_lights(self.lights.mode);
+                        Screen::Lights
+                    }
                     Item::ResetTrip => Screen::Confirm(Confirm::ResetTrip),
                     Item::Ble => Screen::Ble,
                     Item::Diagnostics => Screen::Diag,
                     Item::Firmware => Screen::Firmware,
                     Item::Dfu => Screen::Update,
                 }),
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            // OFF / ON / AUTO: LEFT/RIGHT choose, M sets it, PWR leaves it as it was
+            Screen::Lights => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => self.menu.choice_step(false),
+                (Btn::Right, Click) => self.menu.choice_step(true),
+                (Btn::M, Click) => {
+                    self.lights.pick(self.menu.choice());
+                    self.stack.pop();
+                }
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
             },
@@ -629,14 +654,6 @@ impl<H: Hal> App<H> {
                 }
                 None
             }
-            Page::Lights => {
-                match (ev.btn, ev.g) {
-                    (Btn::Left, Click) => s.lights = false,
-                    (Btn::Right, Click) => s.lights = true,
-                    _ => {}
-                }
-                None
-            }
             Page::Player => match (ev.btn, ev.g) {
                 (Btn::Left, Click) => Some(Command::VolumeDown),
                 (Btn::Left, Hold) => Some(Command::PrevTrack),
@@ -699,9 +716,13 @@ impl<H: Hal> App<H> {
     /// `"DFU!"` opens the Update screen, like the menu item, once the wheel
     /// has stood still for `DFU_STOPPED_MS`. The rider still has to hold PWR:
     /// the bootloader can't keep the display powered across a reset on its
-    /// own (TECH_DESIGN §9.5). Anything else is ignored.
+    /// own (TECH_DESIGN §9.5). A valid time sync (`T…`, 9 bytes) sets the
+    /// clock for the lights' AUTO mode, and the first one after power-on
+    /// switches to AUTO (PRODUCT §3.5). Anything else is ignored.
     pub fn ble_control(&mut self, data: &[u8]) {
-        if data == blep::CONTROL_DFU
+        if let Some(t) = blep::parse_time_sync(data) {
+            self.lights.sync(&t, self.now);
+        } else if data == blep::CONTROL_DFU
             && self.power == Power::On
             && self.now.wrapping_sub(self.last_moving) >= config::DFU_STOPPED_MS
             && self.stack.top() != Screen::Update
@@ -716,6 +737,10 @@ impl<H: Hal> App<H> {
         &self.state
     }
 
+    pub fn lights(&self) -> &Lights {
+        &self.lights
+    }
+
     pub fn power(&self) -> Power {
         self.power
     }
@@ -726,6 +751,11 @@ impl<H: Hal> App<H> {
 
     pub fn menu_item(&self) -> Item {
         self.menu.item()
+    }
+
+    /// The highlighted choice on the lights screen.
+    pub fn lights_choice(&self) -> lights::LightsMode {
+        self.menu.choice()
     }
 
     pub fn saves(&self) -> u32 {

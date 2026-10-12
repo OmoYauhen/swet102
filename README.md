@@ -7,7 +7,8 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 - [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) — how it's built
 
 **Status:** v0.1.0, the first daily-use release (M6): riding screen with PAS,
-Lights, Player and Gate pages, motor bus, error screens, saved settings, lock
+Player and Gate pages, lights (OFF / ON / AUTO by the phone's clock), motor
+bus, error screens, saved settings, lock
 with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
 message, menu, BLE (telemetry, trips, phone commands, DFU from the phone), boot
 animation, page, PAS and info-pane slides. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
@@ -60,6 +61,7 @@ state. Button and key chips light up while held.
 | L | motor link on / off |
 | C | phone connected + subscribed / gone |
 | U | the phone writes `DFU!` (needs a phone, wheel stopped 5 s) |
+| T | the phone sends the time: 12:00 and 21:00 by turns, sunset 19:00, sunrise 07:00 (needs a phone) |
 | F11 | GIF of the display: start / stop (`swet102-NNN.gif`, real timing) |
 | F12 | PNG of the display |
 
@@ -71,12 +73,11 @@ starts with the boot animation, like the bike.
 ## Using it
 
 The tile on the left is the **page**; LEFT / RIGHT act on it. M click goes to
-the next page (PAS → Lights → Player → Gate), PWR click jumps back to PAS.
+the next page (PAS → Player → Gate), PWR click jumps back to PAS.
 
 | Page | LEFT | RIGHT |
 |---|---|---|
 | PAS (number) | PAS − (hold at 0: walk assist, tile shows ↑) | PAS + (0–9) |
-| Lights (bulb) | lights off | lights on; the screen dims while they're on |
 | Player (note) | click: volume −, hold: previous track | click: volume +, hold: next track, double-click: play / pause; the tile shows the sent action for a second |
 | Gate (key) | gate A | gate B |
 
@@ -96,6 +97,7 @@ to commands their glyph is dithered and LEFT / RIGHT do nothing.
 
 The **city PIN** unlocks with a 25 km/h limit, the **sport PIN** with 99 km/h
 (a lightning bolt in the battery icon). PAS, mode and lock survive power-off;
+the lights don't (they start OFF);
 the display switches itself off after 5 minutes without movement, motor current
 or buttons.
 
@@ -106,11 +108,16 @@ power-on or a disconnect, then once a second). Phones connect without pairing.
 The GATT service (`8f030001-da4c-453d-a163-41a592a0e9fd`) has telemetry (1 Hz),
 trips (every 5 s), commands (one notification per Player/Gate press) and a
 control characteristic: writing `DFU!` reboots into the bootloader once the
-wheel has stood still for 5 s. Byte layouts: TECH_DESIGN §9.4.
+wheel has stood still for 5 s, and a 9-byte time sync (`T`, local time,
+today's sunset and sunrise) gives the display a clock for the lights. The app
+sends it on connect and every 10 minutes; the first one after power-on turns
+the lights to AUTO (on from 20 minutes before sunset until sunrise) unless
+you've already picked a mode in the menu. Byte layouts: TECH_DESIGN §9.4–9.5.
 
 There's no phone app yet. `tools/ble-phone.py` stands in for it from a PC with
 Bluetooth: it connects, subscribes to everything and prints what the display
-sends (`--dfu` also writes `DFU!`).
+sends (`--dfu` also writes `DFU!`; `--time 19:05 06:40` sends the PC's clock
+with that sunset and sunrise).
 
 ## Flashing
 
@@ -146,7 +153,8 @@ The hardware checks from TECH_DESIGN §16 that the emulator can't answer:
   opens the same Update screen).
 - [ ] **BLE:** the display boots with the GATT service, the app (or
   `tools/ble-phone.py`) gets telemetry, Player and Gate presses arrive.
-- [ ] **Lights** switch the motor light and dim the screen.
+- [ ] **Menu → Lights → ON** switches the motor light and dims the screen; with
+  the app connected after dark, the lights come on by themselves (AUTO).
 - [ ] Diagnostics screen: `TICK US` average stays well under 20 000 while pages and
   panes slide (late frames only skip, but smooth slides need the headroom).
 - [ ] A smoke ride, then `git tag v0.1.0`.
@@ -157,6 +165,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 
 | Item | Does |
 |---|---|
+| Lights: OFF / ON / AUTO | the label shows the mode in use; M opens the choice: LEFT / RIGHT pick, M sets, PWR leaves it as it was. AUTO = on from 20 min before sunset until sunrise, by the phone's time (off until the phone has sent it). Not saved: OFF after power-on, AUTO once the phone syncs (unless you've picked a mode). A small bulb in the top-right corner of the ride screen shows the lights are on |
 | Reset trip | zeroes the manual trip (asks first) |
 | Bluetooth | phone connected?, commands on?, the display's BLE address, commands sent / notifications dropped |
 | Diagnostics | the screen below |

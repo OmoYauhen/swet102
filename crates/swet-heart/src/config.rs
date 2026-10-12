@@ -44,10 +44,12 @@ pub const SAVE_EVERY_M: u32 = 1000;
 pub const SAVE_STOPPED_MS: u32 = 5000;
 pub const SAVE_STOPPED_MIN_M: u32 = 100;
 
-// --- display (PRODUCT §3.1 Lights) ---
+// --- lights and display (PRODUCT §3.5) ---
 /// SH1107 contrast with the lights off (day) and on (night: dimmer).
 pub const CONTRAST_DAY: u8 = 0xFF;
 pub const CONTRAST_NIGHT: u8 = 0x30;
+/// AUTO turns the lights on this many minutes before sunset (off at sunrise).
+pub const LIGHTS_LEAD_MIN: u16 = 20;
 
 // --- BLE (TECH_DESIGN §9.5) ---
 /// "DFU!" from the phone is accepted only after the wheel has stood still this long.

@@ -1,5 +1,5 @@
-//! M5: Lights page, Player and Gate pages, BLE telemetry/trips/commands,
-//! DFU from the phone.
+//! M5: Player and Gate pages, BLE telemetry/trips/commands, DFU from the
+//! phone. (The Lights page is gone: lights are a menu item, see lights.rs.)
 
 use swet_heart::blep::{self, Command, TELEMETRY_LEN, TRIP_LEN};
 use swet_heart::ui::Screen;
@@ -19,7 +19,7 @@ fn riding(kmh: u32) -> Sim {
 /// M short until `page` is showing (each click waits out the double-click
 /// window and the 150 ms page slide).
 fn goto(s: &mut Sim, page: Page) {
-    for _ in 0..4 {
+    for _ in 0..3 {
         if s.app().page() == page {
             return;
         }
@@ -45,68 +45,20 @@ fn u32_at(b: &[u8], i: usize) -> u32 {
 }
 
 #[test]
-fn m_cycles_pas_lights_player_gate_and_pwr_jumps_back_to_pas() {
+fn m_cycles_pas_player_gate_and_pwr_jumps_back_to_pas() {
     let mut s = riding(0);
     let mut seen = vec![s.app().page()];
-    for _ in 0..4 {
+    for _ in 0..3 {
         s.click(Buttons::M);
         s.run_ms(config::DBL_MS + 200);
         seen.push(s.app().page());
     }
-    assert_eq!(
-        seen,
-        [Page::Pas, Page::Lights, Page::Player, Page::Gate, Page::Pas]
-    );
+    assert_eq!(seen, [Page::Pas, Page::Player, Page::Gate, Page::Pas]);
 
     goto(&mut s, Page::Gate);
     s.click(Buttons::PWR);
     s.run_ms(config::DBL_MS + 200);
     assert_eq!(s.app().page(), Page::Pas);
-}
-
-#[test]
-fn lights_page_switches_the_motor_light_and_dims_the_screen() {
-    let mut s = riding(0);
-    assert_eq!(s.hal().contrast, config::CONTRAST_DAY);
-    goto(&mut s, Page::Lights);
-    s.assert_screen("m5_lights_off");
-
-    s.click(Buttons::RIGHT);
-    s.run_ms(300); // next write slot
-    assert!(s.app().state().lights);
-    assert_eq!(s.hal().motor.lights, Some(true));
-    assert_eq!(s.hal().contrast, config::CONTRAST_NIGHT);
-    s.assert_screen("m5_lights_on");
-
-    s.click(Buttons::LEFT);
-    s.run_ms(300);
-    assert!(!s.app().state().lights);
-    assert_eq!(s.hal().motor.lights, Some(false));
-    assert_eq!(s.hal().contrast, config::CONTRAST_DAY);
-}
-
-#[test]
-fn lights_are_off_after_a_power_cycle() {
-    let mut s = riding(0);
-    goto(&mut s, Page::Lights);
-    s.click(Buttons::RIGHT);
-    s.hold(Buttons::PWR, 1200);
-    assert!(s.hal().powered_off);
-    let mut s = s.reboot();
-    s.boot_to_ride();
-    assert!(!s.app().state().lights);
-    assert_eq!(s.hal().motor.lights, Some(false));
-}
-
-#[test]
-fn lights_do_not_touch_pas() {
-    let mut s = riding(0);
-    s.click(Buttons::RIGHT);
-    s.click(Buttons::RIGHT);
-    goto(&mut s, Page::Lights);
-    s.click(Buttons::LEFT);
-    s.click(Buttons::RIGHT);
-    assert_eq!(s.app().state().pas, 2);
 }
 
 #[test]
@@ -288,6 +240,7 @@ fn trip_reset_sends_the_trip_record_at_once() {
     let before = s.notified(BleChannel::Trips).len();
 
     s.hold(Buttons::M, 1200);
+    s.click(Buttons::RIGHT);
     assert_eq!(s.app().menu_item(), Item::ResetTrip);
     s.click(Buttons::M); // open
     s.click(Buttons::M); // yes
@@ -341,7 +294,7 @@ fn walk_assist_ends_on_release_even_after_a_page_switch() {
     assert!(s.app().state().walk);
     s.click(Buttons::M);
     s.run_ms(config::DBL_MS + 200);
-    assert_eq!(s.app().page(), Page::Lights);
+    assert_eq!(s.app().page(), Page::Player);
     s.release(Buttons::LEFT);
     s.run_ms(100);
     assert!(!s.app().state().walk);
@@ -352,6 +305,7 @@ fn ble_screen_shows_the_phone() {
     let mut s = riding(0);
     s.phone_connect();
     s.hold(Buttons::M, 1200);
+    s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     assert_eq!(s.app().menu_item(), Item::Ble);
     s.click(Buttons::M);

@@ -31,6 +31,8 @@ pub enum Screen {
     /// Menu → Update (or `DFU!` from the phone): hold PWR to restart into
     /// the bootloader's update mode.
     Update,
+    /// Menu → Lights: pick OFF / ON / AUTO.
+    Lights,
 }
 
 const DEPTH: usize = 4;
@@ -82,6 +84,7 @@ pub struct Model {
     pub pas: u8,
     pub walk: bool,
     pub sport: bool,
+    /// The effective light state (the mode applied to the time of day).
     pub lights: bool,
     /// A phone is subscribed to commands: Player and Gate work.
     pub commands: bool,
@@ -112,6 +115,7 @@ pub struct Scene<'a> {
     pub ride: &'a ride::RideScreen,
     pub pin: &'a pin::PinEntry,
     pub menu: &'a menu::Menu,
+    pub lights: &'a crate::lights::Lights,
     pub ble: menu::BleInfo,
     pub model: &'a Model,
     pub diag: &'a diag::DiagData,
@@ -146,12 +150,13 @@ pub fn render(f: &mut Frame, s: &Scene) {
     match s.top {
         Screen::Ride => s.ride.render(f, s.model, s.now),
         Screen::Pin => s.pin.render(f, s.now),
-        Screen::Menu => s.menu.render(f, s.now),
+        Screen::Menu => s.menu.render(f, s.now, s.lights.mode),
         Screen::Confirm(c) => menu::render_confirm(f, c),
         Screen::Diag => diag::render(f, s.diag),
         Screen::Ble => menu::render_ble(f, &s.ble),
         Screen::Firmware => menu::render_firmware(f),
         Screen::Boot => boot::render(f, s.boot_elapsed),
         Screen::Update => menu::render_update_arm(f),
+        Screen::Lights => menu::render_lights(f, s.menu.choice(), s.lights, s.now),
     }
 }

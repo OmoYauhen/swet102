@@ -95,7 +95,7 @@ fn the_link_lost_screen_waits_for_the_boot_to_end() {
 fn page_switch_slides_sideways_inside_the_tile() {
     let mut s = riding(27);
     s.click(Buttons::M);
-    until(&mut s, |s| s.app().page() == Page::Lights);
+    until(&mut s, |s| s.app().page() == Page::Player);
     assert!(s.app().animating());
     s.run_ms(60);
     s.assert_screen("m6_page_slide");

@@ -53,6 +53,7 @@ swet102/
 │   │       ├── input.rs     # debounce + gesture engine
 │   │       ├── motor/       # Bafang protocol: schedule, framing, codec, link state
 │   │       ├── ride.rs      # speed, power, odo/trip/battery-trip/ride counters
+│   │       ├── lights.rs    # lights mode OFF/ON/AUTO, day clock from the phone's time sync
 │   │       ├── lock.rs      # lock state, PIN check → speed limit
 │   │       ├── power.rs     # auto-off, power-off sequence
 │   │       ├── store.rs     # persistent record, encode/decode, save policy, migration
@@ -305,7 +306,7 @@ struct Ui { stack: heapless::Vec<Screen, 4>, popup: Option<Popup>, … }
 These pixel splits are a starting point to tune in the emulator.
 
 ```rust
-#[derive(Clone, Copy)] enum Page { Pas, Lights, Player, Gate }      // ring = declaration order
+#[derive(Clone, Copy)] enum Page { Pas, Player, Gate }      // ring = declaration order
 #[derive(Clone, Copy)] enum View { Speed, Power, Trip, BattTrip, Ride, Odo }
 
 impl Page {
@@ -378,8 +379,8 @@ goes through one fixed chain, and the first handler that matches consumes it:
 | 1 | **Global** | PWR `Hold` → power off (any screen); PWR `Double` → lock + off (ride screen only) |
 | 2 | **Animations** | nothing; a new press (`Down`) first calls `snap()` on running tweens (§5.4) |
 | 3 | **Popup**, if shown | everything: M dismisses an error, any button dismisses the battery-trip message |
-| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
-| 5 | **Ride → current page** | the ride screen keeps M (page ring, pane ring, menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Lights, Player, Gate) |
+| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Lights`: L/R choice, M set, PWR cancel · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
+| 5 | **Ride → current page** | the ride screen keeps M (page ring, pane ring, menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Player, Gate) |
 
 ```rust
 fn dispatch(&mut self, ev: Event, now: u32) {
@@ -675,7 +676,7 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | Swet102 service | `8f030001-…` | |
 | Telemetry | `8f030002-…` | read, notify |
 | Command | `8f030003-…` | notify |
-| Control | `8f030004-…` | write (§9.5) |
+| Control | `8f030004-…` | write, ≤ 20 B: `DFU!` or a 9-byte time sync (§9.5) |
 | Trips | `8f030005-…` | read, notify |
 | Device Information | 0x180A | firmware rev = `VERSION_STRING`, model `SW102`, manufacturer `PET` |
 
@@ -689,7 +690,7 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | 5 | soc | u8 | %; 0xFF before the first reading |
 | 6 | pas | u8 | 0–9 |
 | 7 | speed_limit | u8 | km/h; > 25 = sport |
-| 8 | flags | u8 | bit0 lights, bit1 walk, bit2 motor link up |
+| 8 | flags | u8 | bit0 lights (the effective state, AUTO applied), bit1 walk, bit2 motor link up |
 | 9 | error | u8 | 0 = none, else STATUS code; 0xFF = link lost |
 | 10 | odo_hm | u32 | 100 m units |
 
@@ -730,7 +731,41 @@ dithered). `seq` increments per command, so the app can drop duplicates.
 | 0x10 | gate A |
 | 0x11 | gate B |
 
-### 9.5 DFU entry
+### 9.5 Control: DFU entry, time sync
+
+The phone writes the control characteristic; `ble.c` hands every write (up to
+the 20-byte value length) to `swet_ble_control()`, and `App::ble_control()`
+decides. Two messages; anything else is ignored.
+
+#### Time sync
+
+9 bytes, little-endian (`blep::parse_time_sync`, shared with swet102-app):
+
+| Offset | Field | Type | Notes |
+|---|---|---|---|
+| 0 | tag | u8 | `b'T'` (0x54) |
+| 1 | secs_of_day | u32 | local time, seconds since local midnight, 0..86399 |
+| 5 | sunset_min | u16 | today's local sunset, minutes since midnight, < 1440 |
+| 7 | sunrise_min | u16 | today's local sunrise, minutes since midnight, < 1440 |
+
+- A wrong length, a wrong tag or any value out of range drops the whole
+  message (it doesn't count as a sync either).
+- The phone sends it on connect and every 10 minutes. `lights::DayClock` keeps
+  `(secs_of_day, now)` from the last one and runs the time on from the tick
+  clock: `(secs + (now − at) / 1000) mod 86400`, so it wraps at midnight and
+  survives the `now` wrap. Sunset and sunrise stay those of the last sync.
+- **AUTO** = dark = `t ≥ (sunset − LIGHTS_LEAD_MIN) × 60 || t < sunrise × 60`
+  (`LIGHTS_LEAD_MIN` = 20, `config.rs`); before the first sync it's off. No
+  polar special cases: a sunset within 20 min of midnight clamps to 00:00.
+- `lights::Lights` (RAM only, zero-initialised = OFF, no time): the first valid
+  sync after power-on sets the mode to AUTO unless the rider has picked one in
+  the menu (`picked`); later syncs only update the clock.
+- Each tick `state.lights = lights.on(now)`: the motor light write, the
+  contrast (`CONTRAST_DAY/NIGHT`) and telemetry bit0 follow it.
+- `tools/ble-phone.py --time SUNSET SUNRISE` sends the PC's local time; the
+  emulator's T key sends 12:00 / 21:00.
+
+#### DFU entry
 
 SS has **no** way into DFU from the app. Today it's entered with the bootloader's
 own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
@@ -759,7 +794,7 @@ own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
 - **From the phone:** writing `"DFU!"` to the control characteristic opens the
   same Update screen (the rider still holds PWR). It's only accepted after the
   wheel has been stopped for 5 s (`DFU_STOPPED_MS`; "stopped" includes no motor
-  link). Any other write is ignored. `tools/ble-phone.py --dfu` does this from a PC.
+  link). `tools/ble-phone.py --dfu` does this from a PC.
 - **Security:** unauthenticated, and the DFU signing key is public
   (`prebuilt/private.key`). That's accepted, consistent with product §9.
 
@@ -853,6 +888,7 @@ is powered off and started with a long PWR press (soft power latch).
 | L | toggle motor link |
 | C | toggle "phone connected + subscribed" (B is braking) |
 | U | the phone writes `DFU!` to the control characteristic |
+| T | the phone sends a time sync (12:00 and 21:00 by turns; sunset 19:00, sunrise 07:00) |
 | F12 | PNG screenshot |
 | F11 | GIF recording |
 
@@ -1101,3 +1137,5 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-07 | DFU entry: GPREGRET 0xB1 did nothing on hardware (SDK 12 bootloader); now `enter_buttonless_dfu` in the CRC-checked settings page, written with the SoftDevice off; the Update screen is flushed before the reset so the OLED keeps it |
 | 2026-10-11 | DFU entry: the settings-flag route also failed on hardware (the reset drops the power latch before the bootloader latches it; source: geeksville/SW102_LCD_Bluetooth-bootloader). Now Menu → Update asks the rider to hold PWR; on PWR down we save and reset, and the bootloader's own 5 s PWR-hold path enters DFU with the button keeping the board powered. No flash writes; `DFU!` from the phone opens the same screen |
 | 2026-10-11 | Player page: after a command goes out, the tile shows its icon for `ACTION_MS` (1 s) instead of the note (`RideScreen::show_action`, `PlayerAction`, zero-initialised); a page change ends it; nothing shows when no phone is subscribed |
+| 2026-10-12 | Lights page removed (`Page` = Pas, Player, Gate). `lights.rs`: `LightsMode` Off/On/Auto + `DayClock`, RAM only, zero-initialised (OFF, no time); menu item `Item::Lights` (first) opens `Screen::Lights` (L/R choice, M set, PWR cancel). `state.lights` is now derived every tick from `lights.on(now)` |
+| 2026-10-12 | Control message `T` (9 B: secs_of_day u32, sunset_min u16, sunrise_min u16; strict length and ranges) next to `DFU!`; the clock runs on the tick between syncs; AUTO = `t ≥ sunset − LIGHTS_LEAD_MIN (20) or t < sunrise`. The first valid sync after power-on switches to AUTO unless the rider already picked a mode. `ble.c` needs no change: the control value takes 20 B |

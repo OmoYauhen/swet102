@@ -36,7 +36,7 @@ fn show_view(s: &mut Sim, v: View) {
 fn open_menu_at(s: &mut Sim, item: Item) {
     s.hold(Buttons::M, 1200);
     assert_eq!(s.app().screen(), Screen::Menu);
-    for _ in 0..5 {
+    for _ in 0..Item::ALL.len() {
         if s.app().menu_item() == item {
             return;
         }
@@ -122,13 +122,10 @@ fn reset_trip_from_the_menu_with_confirmation() {
 fn menu_wraps_and_pwr_backs_out() {
     let mut s = ride(0, 0, 1);
     s.hold(Buttons::M, 1200);
-    assert_eq!(
-        s.app().menu_item(),
-        Item::ResetTrip,
-        "opens at the first item"
-    );
+    assert_eq!(s.app().menu_item(), Item::Lights, "opens at the first item");
     s.click(Buttons::LEFT);
     assert_eq!(s.app().menu_item(), Item::Dfu);
+    s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     assert_eq!(s.app().menu_item(), Item::Ble);
@@ -137,7 +134,7 @@ fn menu_wraps_and_pwr_backs_out() {
     s.hold(Buttons::M, 1200);
     assert_eq!(
         s.app().menu_item(),
-        Item::ResetTrip,
+        Item::Lights,
         "position is not remembered"
     );
 }

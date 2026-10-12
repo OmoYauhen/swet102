@@ -242,6 +242,18 @@ impl Sim {
         self.app.ble_control(data);
     }
 
+    /// The phone sends its time (TECH_DESIGN §9.5): local seconds since
+    /// midnight, today's sunset and sunrise in minutes since midnight.
+    pub fn phone_send_time(&mut self, secs_of_day: u32, sunset_min: u16, sunrise_min: u16) {
+        let t = swet_heart::blep::TimeSync {
+            secs_of_day,
+            sunset_min,
+            sunrise_min,
+        };
+        self.app
+            .ble_control(&swet_heart::blep::encode_time_sync(&t));
+    }
+
     /// Notifications the phone got on `ch`, oldest first.
     pub fn notified(&self, ch: BleChannel) -> Vec<Vec<u8>> {
         self.hal()
