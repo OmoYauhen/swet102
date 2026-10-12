@@ -540,8 +540,8 @@ fn report_gif(r: record::Recorder) {
     }
 }
 
-/// Headless: a scripted tour (boot, PAS, every page, lights from the menu,
-/// pane slides) as a GIF.
+/// Headless: a scripted tour (boot, PAS, every page, the Firmware screen from
+/// the menu, pane slides) as a GIF.
 fn demo_gif(path: &str) {
     let mut sim = Sim::booting(None);
     sim.phone_connect();
@@ -566,14 +566,16 @@ fn demo_gif(path: &str) {
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Player
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Gate
     tap(&mut sim, &mut rec, Buttons::PWR, 1000); // back to PAS
-    // menu → Lights → ON, back to the ride screen (the bulb mark shows)
+    // menu → Firmware (version, build, QR code), back to the ride screen
     sim.press(Buttons::M);
     run(&mut sim, &mut rec, 1200);
     sim.release(Buttons::M);
     run(&mut sim, &mut rec, 600);
-    tap(&mut sim, &mut rec, Buttons::M, 600); // open Lights
-    tap(&mut sim, &mut rec, Buttons::RIGHT, 600); // OFF → ON
-    tap(&mut sim, &mut rec, Buttons::M, 800); // set
+    for _ in 0..4 {
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 400); // Lights → … → Firmware
+    }
+    tap(&mut sim, &mut rec, Buttons::M, 2500); // open Firmware
+    tap(&mut sim, &mut rec, Buttons::PWR, 600); // back to the menu
     tap(&mut sim, &mut rec, Buttons::PWR, 1000); // out of the menu
     for _ in 0..2 {
         // M double-click: the next info view slides up
