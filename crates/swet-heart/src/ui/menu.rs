@@ -150,18 +150,8 @@ impl Menu {
         } else {
             item.label()
         };
-        // Special thanks: a small heart before the label (the ❤️ of the
-        // owner's spec; the display is 1-bit, so no emoji)
-        let heart = if item == Item::Thanks && !showing_done {
-            HEART[0].len() as i32 + 3
-        } else {
-            0
-        };
-        let x = (W - heart - TEXT.width(label, 1)) / 2;
-        if heart > 0 {
-            draw_art(f, &HEART, x, 41, 1);
-        }
-        f.text(&TEXT, label, x + heart, 38, 1, Mode::Set);
+        let x = (W - TEXT.width(label, 1)) / 2;
+        f.text(&TEXT, label, x, 38, 1, Mode::Set);
 
         let n = Item::ALL.len() as i32;
         let x0 = (W - (n * 8 - 4)) / 2;
@@ -417,8 +407,7 @@ pub fn draw_art<R: AsRef<[u8]>>(f: &mut Frame, art: &[R], x: i32, y: i32, px: i3
     }
 }
 
-/// Small filled heart, 9×8: next to the Special thanks label, and above the
-/// names on its screen.
+/// Small filled heart, 9×8: above the names on the Special thanks screen.
 pub const HEART: [&[u8; 9]; 8] = [
     b".##...##.",
     b"####.####",

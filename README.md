@@ -173,7 +173,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Diagnostics | the screen below |
 | Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
 | Update (DFU) | asks you to press and **hold PWR for 5 s**: on the press it saves and restarts, and the held button keeps the display powered until the bootloader is in DFU mode (`SW102_DFU`) |
-| ♥ Special thanks | the last item (a small heart before the label): the people who helped, one name at a time, as written (`@entropia_pl`, `@yahor_k`, `@veganbunt`). LEFT / RIGHT step through them (it wraps); each name slides in like the boot text. PWR goes back |
+| ♥ Special thanks | the last item: the people who helped, one name at a time, as written (`@entropia_pl`, `@yahor_k`, `@veganbunt`). LEFT / RIGHT step through them (it wraps); each name slides in like the boot text. PWR goes back |
 
 **Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
 by 10 % or more (and shows how far the last charge went), RIDE starts at 0 on
