@@ -1,6 +1,7 @@
 //! The M-hold menu (PRODUCT §5): one item per screen with a big icon, its
 //! label and position dots. LEFT/RIGHT flip (wrapping), M enters, PWR backs
-//! out. Also the confirm, lights, BLE status and firmware screens it opens.
+//! out. Also the confirm, lights, BLE status and firmware screens it opens
+//! (Special thanks has its own module, `ui/thanks.rs`).
 
 use crate::config;
 use crate::gfx::assets::{QR_REPO, TEXT};
@@ -16,17 +17,19 @@ pub enum Item {
     Diagnostics,
     Firmware,
     Dfu,
+    Thanks,
 }
 
 impl Item {
     /// Ring order (PRODUCT §5).
-    pub const ALL: [Item; 6] = [
+    pub const ALL: [Item; 7] = [
         Item::Lights,
         Item::ResetTrip,
         Item::Ble,
         Item::Diagnostics,
         Item::Firmware,
         Item::Dfu,
+        Item::Thanks,
     ];
 
     fn label(self) -> &'static [u8] {
@@ -37,6 +40,7 @@ impl Item {
             Item::Diagnostics => b"Diagnostics",
             Item::Firmware => b"Firmware",
             Item::Dfu => b"Update (DFU)",
+            Item::Thanks => b"Special thanks",
         }
     }
 
@@ -48,6 +52,7 @@ impl Item {
             Item::Diagnostics => &ICON_WRENCH,
             Item::Firmware => &ICON_INFO,
             Item::Dfu => &ICON_DOWNLOAD,
+            Item::Thanks => &ICON_HEART,
         }
     }
 }
@@ -145,14 +150,8 @@ impl Menu {
         } else {
             item.label()
         };
-        f.text(
-            &TEXT,
-            label,
-            (W - TEXT.width(label, 1)) / 2,
-            38,
-            1,
-            Mode::Set,
-        );
+        let x = (W - TEXT.width(label, 1)) / 2;
+        f.text(&TEXT, label, x, 38, 1, Mode::Set);
 
         let n = Item::ALL.len() as i32;
         let x0 = (W - (n * 8 - 4)) / 2;
@@ -394,14 +393,50 @@ fn update_screen(f: &mut Frame, lines: &[(&[u8], i32)]) {
 type Icon = [&'static [u8; 16]; 16];
 
 fn draw_icon(f: &mut Frame, icon: &Icon, x: i32, y: i32) {
-    for (r, row) in icon.iter().enumerate() {
-        for (c, &px) in row.iter().enumerate() {
-            if px == b'#' {
-                f.fill_rect(x + 2 * c as i32, y + 2 * r as i32, 2, 2, Mode::Set);
+    draw_art(f, icon, x, y, 2);
+}
+
+/// Text art (`#` = lit), each pixel drawn `px`×`px`, top-left at (`x`, `y`).
+pub fn draw_art<R: AsRef<[u8]>>(f: &mut Frame, art: &[R], x: i32, y: i32, px: i32) {
+    for (r, row) in art.iter().enumerate() {
+        for (c, &p) in row.as_ref().iter().enumerate() {
+            if p == b'#' {
+                f.fill_rect(x + px * c as i32, y + px * r as i32, px, px, Mode::Set);
             }
         }
     }
 }
+
+/// Small filled heart, 9×8: above the names on the Special thanks screen.
+pub const HEART: [&[u8; 9]; 8] = [
+    b".##...##.",
+    b"####.####",
+    b"#########",
+    b"#########",
+    b".#######.",
+    b"..#####..",
+    b"...###...",
+    b"....#....",
+];
+
+const ICON_HEART: Icon = [
+    b"................",
+    b"..###......###..",
+    b".#...#....#...#.",
+    b"#.....#..#.....#",
+    b"#......##......#",
+    b"#..............#",
+    b"#..............#",
+    b".#............#.",
+    b"..#..........#..",
+    b"...#........#...",
+    b"....#......#....",
+    b".....#....#.....",
+    b"......#..#......",
+    b".......##.......",
+    b"................",
+    b"................",
+];
 
 const ICON_BULB: Icon = [
     b".....######.....",
@@ -525,7 +560,10 @@ mod tests {
     fn ring_wraps_both_ways_and_reopens_at_the_top() {
         let mut m = Menu::new();
         m.prev();
+        assert_eq!(m.item(), Item::Thanks, "last in the ring");
+        m.prev();
         assert_eq!(m.item(), Item::Dfu);
+        m.next();
         m.next();
         m.next();
         assert_eq!(m.item(), Item::ResetTrip);

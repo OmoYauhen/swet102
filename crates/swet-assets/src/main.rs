@@ -138,16 +138,28 @@ struct PixelFontSrc {
     scale: usize,
 }
 
-const PIXEL_FONTS: &[PixelFontSrc] = &[PixelFontSrc {
-    // W95FA (SIL OFL 1.1, assets/fonts/W95FA-OFL.txt): PAS number in the page
-    // tile, "!" and the hex code on the error screen.
-    name: "W95",
-    file: "fonts/W95FA.otf",
-    chars: "!0123456789ABCDEF",
-    unit: 80.0,
-    x_origin: 50.0,
-    scale: 4,
-}];
+const PIXEL_FONTS: &[PixelFontSrc] = &[
+    PixelFontSrc {
+        // W95FA (SIL OFL 1.1, assets/fonts/W95FA-OFL.txt): PAS number in the page
+        // tile, "!" and the hex code on the error screen.
+        name: "W95",
+        file: "fonts/W95FA.otf",
+        chars: "!0123456789ABCDEF",
+        unit: 80.0,
+        x_origin: 50.0,
+        scale: 4,
+    },
+    PixelFontSrc {
+        // W95FA at its own size (1 design pixel = 1 px; drawn magnified): the
+        // names on the Special thanks screen, lowercase as written.
+        name: "W95_NICK",
+        file: "fonts/W95FA.otf",
+        chars: "@_abcdefghijklmnopqrstuvwxyz",
+        unit: 80.0,
+        x_origin: 50.0,
+        scale: 1,
+    },
+];
 
 /// Rasterise each char on the font's pixel grid, crop each glyph to its ink
 /// columns and all glyphs to their common ink rows, then scale up.
@@ -161,10 +173,12 @@ fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
     let scaled = font.as_scaled(PxScale::from(px));
     const CANVAS: usize = 64;
     let baseline = 48.0;
+    // whole pixels left of the grid origin, for glyphs that ink left of it
+    const PAD: f32 = 8.0;
     let mut glyphs: Vec<Vec<bool>> = Vec::new();
     for c in src.chars.chars() {
         let mut g = scaled.scaled_glyph(c);
-        g.position = point(-src.x_origin / src.unit, baseline);
+        g.position = point(PAD - src.x_origin / src.unit, baseline);
         let mut canvas = vec![false; CANVAS * CANVAS];
         if let Some(o) = font.outline_glyph(g) {
             let b = o.px_bounds();

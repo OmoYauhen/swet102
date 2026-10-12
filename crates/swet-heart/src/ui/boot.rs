@@ -53,18 +53,34 @@ fn scales() -> (i32, i32) {
     (name, version)
 }
 
+/// Linear progress 0..=`ONE` of `t` through `dur`.
+fn progress(t: u32, dur: u32) -> i32 {
+    (t.min(dur) * ONE as u32 / dur) as i32
+}
+
+/// The slide in: from `W` (off screen right) to 0, ease-out, over
+/// `SLIDE_IN_MS`. Also the Special thanks names (`ui/thanks.rs`).
+pub fn slide_in(t: u32) -> i32 {
+    let rest = ONE - progress(t, SLIDE_IN_MS);
+    travel(W, rest * rest / ONE)
+}
+
+/// The slide out: from 0 to `-W` (off screen left), ease-in, over
+/// `SLIDE_OUT_MS`.
+pub fn slide_out(t: u32) -> i32 {
+    let q = progress(t, SLIDE_OUT_MS);
+    -travel(W, q * q / ONE)
+}
+
 /// Horizontal offset of the rows: in from the right (ease-out), still, then
 /// out to the left (ease-in).
 fn offset(t: u32) -> i32 {
-    let p = |t: u32, dur: u32| (t.min(dur) * ONE as u32 / dur) as i32; // 0..ONE
     if t < SLIDE_IN_MS {
-        let rest = ONE - p(t, SLIDE_IN_MS);
-        travel(W, rest * rest / ONE)
+        slide_in(t)
     } else if t < SLIDE_IN_MS + HOLD_MS {
         0
     } else {
-        let q = p(t - SLIDE_IN_MS - HOLD_MS, SLIDE_OUT_MS);
-        -travel(W, q * q / ONE)
+        slide_out(t - SLIDE_IN_MS - HOLD_MS)
     }
 }
 

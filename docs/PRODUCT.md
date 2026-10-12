@@ -203,6 +203,7 @@ The UI should feel alive, not just redraw. Swang Stodva's renderer already runs 
 | **Page switch** | M short, PWR short (jump to PAS) | ~150 ms horizontal slide inside the white tile: the old glyph slides out to the left and the new one comes in from the right (the other way round for PWR back to PAS). The tile itself stays put. |
 | **Info-pane switch** | M double-click | ~200 ms vertical slide: the old view slides up and out, the new view comes up from the bottom. Column 1 and the battery don't move. |
 | **PAS change** | LEFT/RIGHT on the PAS page | The number slides sideways like the pages (~100 ms): a higher level comes in from the right, a lower one from the left. |
+| **Special thanks** | Opening the screen, LEFT/RIGHT on it (§5) | The boot's slides, one name at a time: the first name slides in from the right on opening; a step slides the old name out to the left, then the new one in from the right (400 ms each, the boot's ease-in / ease-out). LEFT mirrors it. |
 
 Rules:
 
@@ -215,7 +216,7 @@ Rules:
   simple ease-out (fast start, soft stop), done in integer math.
 - The emulator's scripted tests run on a fixed simulated clock, so mid-animation
   frames can be asserted exactly (§10).
-- Out of scope for now: animations for the menu, error screen and lock. The
+- Out of scope for now: animations for the menu (apart from Special thanks), error screen and lock. The
   lock already has its padlock flash (§4).
 
 ### 3.5 Lights
@@ -312,6 +313,7 @@ normally (assist and speed limit don't change; the lights follow their mode).
 - It opens on the first item every time; the last position isn't remembered.
 - **Choice screens** (Lights): the choices side by side, the highlighted one inverted. It opens on the current one; LEFT/RIGHT move (wrapping), M sets it and returns to the item, PWR (esc) returns without a change.
 - **Detail screens** (BLE status, diagnostics, firmware version): PWR (esc) returns to the item. Inside diagnostics, LEFT/RIGHT page through the values when there's more than one screen of them.
+- **Special thanks**: one name at a time, centred, large; LEFT/RIGHT step through the names (wrapping), M does nothing, PWR (esc) returns to the item. It opens on the first name every time.
 
 ### Items (in ring order)
 
@@ -323,6 +325,7 @@ normally (assist and speed limit don't change; the lights follow their mode).
 | 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count. | — |
 | 5 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
 | 6 | **Reboot to DFU** | download arrow | Reboots into casainho's bootloader in BLE DFU mode, as a fallback if the phone can't trigger an update over the air. Motor assist stops until the display comes back up, hence the confirmation. | **Yes**: "Reboot to DFU?" M = yes, PWR = cancel. |
+| 7 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
 
 Not in the menu, on purpose: **Lock** (it's PWR double-click, §4). PINs, wheel size, speed limits and motor type are compile-time
 constants. Brightness follows the light state automatically. The speed-limit encoding test (§6) is done by reflashing, not with a menu item.
@@ -643,4 +646,5 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-07 | Owner, second look: boot text in two rows (SWET102 / version), slide in → hold 1.2 s → slide out (≈ 2.6 s in all; the scroll was too fast to read); the PAS number slides horizontally like the pages |
 | 2026-10-07 | Version row in smaller text than SWET102, so `v<version>` always fits (no dropped "v") |
 | 2026-10-11 | Player page: the tile shows the sent action (speaker −/+, skip back/forward, play/pause) for 1 s instead of the note; nothing when no phone took the command |
+| 2026-10-12 | Menu item **♥ Special thanks**, last in the ring (heart icon; the 1-bit display has no ❤️ emoji, and the label has no heart of its own). M opens it: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, as written, centred; LEFT/RIGHT step (wrapping), PWR back. Each name comes and goes with the boot animation's slides (in from the right on opening; a step slides the old name out, then the new one in; LEFT mirrors it). Font: W95FA at 2×, the largest scale at which `@entropia_pl` fits (126 of 128 px with the font's own 1-pixel spacing), the same for all three names |
 | 2026-10-12 | Lights page removed (ring PAS → Player → Gate). Lights are a menu item, first in the ring, with OFF / ON / AUTO (choice screen: L/R pick, M set, PWR cancel); RAM only, OFF at power-on. AUTO = on from sunset − 20 min until sunrise, from the phone's time sync (local time + today's sunset/sunrise, on connect and every 10 min); off without a time. The first sync after power-on switches to AUTO unless the rider has picked a mode; a pick always wins. Small bulb on the ride screen while the lights are on |
