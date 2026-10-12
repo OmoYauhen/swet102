@@ -6,6 +6,9 @@ display, subscribe to everything and print what it sends.
     tools/ble-phone.py                 scan for "swet102", connect, print
     tools/ble-phone.py --address XX:.. connect to a known address
     tools/ble-phone.py --dfu           also write "DFU!" to the control characteristic
+    tools/ble-phone.py --time 19:05 06:40
+                                       also send the PC's local time with that
+                                       sunset and sunrise (lights AUTO)
 
 No pairing: like the real app, it just connects. Ctrl-C to quit.
 """
@@ -14,6 +17,7 @@ import argparse
 import asyncio
 import struct
 import sys
+import time
 
 from bleak import BleakClient, BleakScanner
 
@@ -66,10 +70,26 @@ def command(_, data: bytearray) -> None:
     print(f"CMD  #{seq:3d} {COMMANDS.get(code, f'code {code:02X}')}")
 
 
+def hhmm(s: str) -> int:
+    h, m = (int(x) for x in s.split(":"))
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise argparse.ArgumentTypeError(f"not a time of day: {s}")
+    return h * 60 + m
+
+
+def time_sync(sunset_min: int, sunrise_min: int) -> bytes:
+    """The control message the app sends on connect (TECH_DESIGN §9.5)."""
+    t = time.localtime()
+    secs = t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec
+    return struct.pack("<BIHH", ord("T"), secs, sunset_min, sunrise_min)
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--address", help="display address (skip the scan)")
     ap.add_argument("--dfu", action="store_true", help='write "DFU!" (wheel must be stopped 5 s)')
+    ap.add_argument("--time", nargs=2, type=hhmm, metavar=("SUNSET", "SUNRISE"),
+                    help="send the local time with today's sunset and sunrise (HH:MM)")
     args = ap.parse_args()
 
     target = args.address
@@ -86,6 +106,9 @@ async def main() -> None:
         await c.start_notify(TELEMETRY, telemetry)
         await c.start_notify(TRIPS, trips)
         await c.start_notify(COMMAND, command)
+        if args.time:
+            await c.write_gatt_char(CONTROL, time_sync(*args.time), response=True)
+            print(f"sent the time ({time.strftime('%H:%M:%S')}); the first sync sets lights to AUTO")
         if args.dfu:
             await c.write_gatt_char(CONTROL, b"DFU!", response=True)
             print('wrote "DFU!": the display should reboot into SW102_DFU')

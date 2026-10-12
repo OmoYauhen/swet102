@@ -8,6 +8,7 @@
 //!   after a reset.
 //! - **Command**: `[seq, code]`, once per button press, only while the phone
 //!   is subscribed to it. Fire-and-forget: nothing is queued or retried.
+//! - **Control** (phone → display): `DFU!`, or a 9-byte time sync (`T`).
 //!
 //! `Hal::ble_notify` publishes a value: it becomes what a read returns and is
 //! notified to a subscribed phone. All payloads are little-endian and fit the
@@ -32,6 +33,44 @@ pub const SOC_UNKNOWN: u8 = 0xFF;
 
 /// The phone wrote this to the control characteristic: reboot into DFU.
 pub const CONTROL_DFU: &[u8] = b"DFU!";
+
+/// Control message: the phone's local time and today's sun (TECH_DESIGN §9.5).
+/// `[b'T', secs_of_day u32, sunset_min u16, sunrise_min u16]`, little-endian.
+pub const CONTROL_TIME: u8 = b'T';
+pub const TIME_SYNC_LEN: usize = 9;
+
+/// A valid time sync: all values local, from midnight.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TimeSync {
+    /// 0..86399
+    pub secs_of_day: u32,
+    /// Minutes, < 1440.
+    pub sunset_min: u16,
+    pub sunrise_min: u16,
+}
+
+/// `None` for a wrong tag or length, or any value out of range.
+pub fn parse_time_sync(b: &[u8]) -> Option<TimeSync> {
+    if b.len() != TIME_SYNC_LEN || b[0] != CONTROL_TIME {
+        return None;
+    }
+    let t = TimeSync {
+        secs_of_day: u32::from_le_bytes([b[1], b[2], b[3], b[4]]),
+        sunset_min: u16::from_le_bytes([b[5], b[6]]),
+        sunrise_min: u16::from_le_bytes([b[7], b[8]]),
+    };
+    (t.secs_of_day < 24 * 3600 && t.sunset_min < 24 * 60 && t.sunrise_min < 24 * 60).then_some(t)
+}
+
+/// The bytes of a time sync, as the phone sends them (simulator, tools).
+pub fn encode_time_sync(t: &TimeSync) -> [u8; TIME_SYNC_LEN] {
+    let mut b = [0u8; TIME_SYNC_LEN];
+    b[0] = CONTROL_TIME;
+    b[1..5].copy_from_slice(&t.secs_of_day.to_le_bytes());
+    b[5..7].copy_from_slice(&t.sunset_min.to_le_bytes());
+    b[7..9].copy_from_slice(&t.sunrise_min.to_le_bytes());
+    b
+}
 
 /// Commands sent to the phone (display → phone, command characteristic).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -232,6 +271,34 @@ mod tests {
                 2, 0x23, 0x01, 0x56, 0x04, 78, 3, 25, 0b101, 0, 0xD2, 0x04, 0, 0
             ]
         );
+    }
+
+    #[test]
+    fn time_sync_layout_and_rejects() {
+        // 18:30:15, sunset 19:05, sunrise 06:40
+        let b = [b'T', 0x37, 0x04, 0x01, 0x00, 0x77, 0x04, 0x90, 0x01];
+        let t = TimeSync {
+            secs_of_day: 66_615,
+            sunset_min: 1143,
+            sunrise_min: 400,
+        };
+        assert_eq!(parse_time_sync(&b), Some(t));
+        assert_eq!(encode_time_sync(&t), b);
+
+        assert_eq!(parse_time_sync(&b[..8]), None, "short");
+        assert_eq!(parse_time_sync(&[&b[..], &[0]].concat()), None, "long");
+        assert_eq!(parse_time_sync(b"DFU!"), None);
+        let bad = |i: usize, v: &[u8]| {
+            let mut x = b;
+            x[i..i + v.len()].copy_from_slice(v);
+            parse_time_sync(&x)
+        };
+        assert_eq!(bad(0, b"t"), None, "tag");
+        assert_eq!(bad(1, &86_400u32.to_le_bytes()), None, "secs");
+        assert!(bad(1, &86_399u32.to_le_bytes()).is_some());
+        assert_eq!(bad(5, &1440u16.to_le_bytes()), None, "sunset");
+        assert_eq!(bad(7, &1440u16.to_le_bytes()), None, "sunrise");
+        assert!(bad(7, &1439u16.to_le_bytes()).is_some());
     }
 
     #[test]

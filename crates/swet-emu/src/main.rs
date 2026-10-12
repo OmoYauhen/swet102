@@ -108,6 +108,7 @@ fn main() {
     // the motor only knows whole rpm; keep the km/h target here so ±1 steps never stall
     let mut kmh = 0u32;
     let mut commands_seen = 0u32;
+    let mut night = false;
 
     while window.is_open() && !sim.hal().powered_off && !sim.hal().dfu_requested {
         let mut buttons = 0;
@@ -169,6 +170,12 @@ fn main() {
         }
         if once(Key::U) && sim.hal().ble.0 != 0 {
             sim.phone_write_control(swet_heart::blep::CONTROL_DFU);
+        }
+        if once(Key::T) && sim.hal().ble.0 != 0 {
+            // the phone's time, alternating day / night (sunset 19:00, sunrise 07:00)
+            night = !night;
+            let secs = if night { 21 * 3600 } else { 12 * 3600 };
+            sim.phone_send_time(secs, 19 * 60, 7 * 60);
         }
         if once(Key::F11) {
             match gif.take() {
@@ -370,6 +377,21 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         "unlocked"
     };
     row(c, &mut y, "Lock", lock);
+    let l = app.lights();
+    let clock = l.clock.secs_of_day(sim.now_ms()).map_or_else(
+        || "no time".to_string(),
+        |t| format!("{:02}:{:02}", t / 3600, t / 60 % 60),
+    );
+    let on = if st.lights { "on" } else { "off" };
+    row(
+        c,
+        &mut y,
+        "Lights",
+        &format!(
+            "{}: {on}  ({clock})",
+            String::from_utf8_lossy(l.mode.label())
+        ),
+    );
     let screen = match app.screen() {
         swet_heart::ui::Screen::Menu => format!("Menu: {:?}", app.menu_item()),
         s => format!("{s:?}"),
@@ -431,7 +453,8 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         "F12: PNG of the display   F11: GIF start / stop   --fresh: empty flash",
         "Dev-build PINs: city 1111, sport 2222",
         "Motor: B brake, X error 21, L link, W/S speed, E/D current, R/F battery",
-        "Phone: C connect / disconnect (subscribed to everything), U sends DFU!",
+        "Phone: C connect / disconnect (subscribed to everything), U sends DFU!,",
+        "  T sends the time (alternately 12:00 and 21:00; sunset 19:00)",
     ]
     .iter()
     .enumerate()
@@ -506,7 +529,8 @@ fn report_gif(r: record::Recorder) {
     }
 }
 
-/// Headless: a scripted tour (boot, PAS, every page, pane slides) as a GIF.
+/// Headless: a scripted tour (boot, PAS, every page, lights from the menu,
+/// pane slides) as a GIF.
 fn demo_gif(path: &str) {
     let mut sim = Sim::booting(None);
     sim.phone_connect();
@@ -528,11 +552,18 @@ fn demo_gif(path: &str) {
     for _ in 0..3 {
         tap(&mut sim, &mut rec, Buttons::RIGHT, 500); // PAS 1, 2, 3: the number slides
     }
-    tap(&mut sim, &mut rec, Buttons::M, 1000); // Lights
-    tap(&mut sim, &mut rec, Buttons::RIGHT, 1000); // lights on
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Player
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Gate
     tap(&mut sim, &mut rec, Buttons::PWR, 1000); // back to PAS
+    // menu → Lights → ON, back to the ride screen (the bulb mark shows)
+    sim.press(Buttons::M);
+    run(&mut sim, &mut rec, 1200);
+    sim.release(Buttons::M);
+    run(&mut sim, &mut rec, 600);
+    tap(&mut sim, &mut rec, Buttons::M, 600); // open Lights
+    tap(&mut sim, &mut rec, Buttons::RIGHT, 600); // OFF → ON
+    tap(&mut sim, &mut rec, Buttons::M, 800); // set
+    tap(&mut sim, &mut rec, Buttons::PWR, 1000); // out of the menu
     for _ in 0..2 {
         // M double-click: the next info view slides up
         tap(&mut sim, &mut rec, Buttons::M, 60);

@@ -106,11 +106,10 @@ The screen is split into three columns:
 | Page | LEFT | RIGHT | Notes |
 |---|---|---|---|
 | **PAS** | assist −1 | assist +1 | Shows the current level 0–9. Saved to EEPROM. **Hold LEFT at level 0 → walk assist** for as long as it's held. |
-| **Lights** | lights off | lights on | Uses the motor's light output. Screen brightness follows the light state (dimmer when lights are on). |
 | **Player** | click: volume −<br>hold: previous track | click: volume +<br>hold: next track<br>double-click: play / pause | Sent over BLE to the companion app. For a second after a command goes out, the tile shows what was sent (speaker −/+, skip back/forward, play/pause) instead of the note. |
 | **Gate** | open gate A | open gate B | Short presses, two gates. Sent over BLE to the companion app. |
 
-The page ring order is fixed at compile time. Pages that need BLE are shown as unavailable when no phone is connected.
+The page ring order is fixed at compile time: PAS → Player → Gate. Pages that need BLE are shown as unavailable when no phone is connected. Lights are not a page: they're a menu item (§3.5).
 
 #### Page tile glyphs
 
@@ -120,7 +119,6 @@ The tile is about 25 px wide and nearly the full 64 px tall. The glyph is black,
 |---|---|
 | PAS | The **PAS level number** 0–9, large, in the **W95FA** font (Windows 95 style pixel font) |
 | PAS, walk assist active | **Up arrow** (↑), replacing the number while LEFT is held |
-| Lights | **Light bulb** |
 | Player | **Music note** |
 | Gate | **Key** |
 
@@ -220,6 +218,35 @@ Rules:
 - Out of scope for now: animations for the menu, error screen and lock. The
   lock already has its padlock flash (§4).
 
+### 3.5 Lights
+
+The motor's light output, switched in the menu (**M hold → Lights → M**, §5)
+with three choices:
+
+| Mode | Lights |
+|---|---|
+| **OFF** | off |
+| **ON** | on |
+| **AUTO** | on when it's dark: local time ≥ **sunset − 20 min**, or before **sunrise**; off otherwise. Off while the display doesn't know the time. |
+
+- The display has no clock of its own: the **phone sends the local time and
+  today's sunset and sunrise** (on connect and every 10 minutes, §9). Between
+  syncs the display keeps the time running and wraps at midnight, using the
+  last sunset and sunrise it got. The 20 min lead is a constant
+  (`LIGHTS_LEAD_MIN`).
+- **RAM only**, never saved: after power-on the mode is **OFF**.
+- The **first time sync after power-on switches to AUTO**, so with the phone
+  along the lights look after themselves. Only the first one: once the rider
+  picks a mode in the menu, later syncs and reconnects leave it alone. A pick
+  made **before** the first sync (no phone yet) is kept as well: the rider's
+  choice always wins.
+- Without a phone, OFF and ON work as usual (AUTO stays off).
+- The effective light state (the mode applied to the time) drives the motor
+  light, the **screen brightness** (dimmer while the lights are on) and the
+  telemetry lights flag.
+- The menu item's label shows the mode (`Lights: AUTO`); while the lights are
+  on, a small bulb sits in the top-right corner of the info pane.
+
 ---
 
 ## 4. Controls
@@ -260,7 +287,7 @@ lock double-click. Jumping back to PAS is not time-critical, so that's acceptabl
 **M hold (1 s)** opens the menu from the riding screen. The menu shows **one item
 per screen**: a big 1-bit icon with a short label underneath, using the full
 128×64. Riding data is hidden while the menu is open, but the motor keeps working
-normally (assist, lights and speed limit don't change).
+normally (assist and speed limit don't change; the lights follow their mode).
 
 ```
 ┌──────────────────────────────────────────┐
@@ -283,17 +310,19 @@ normally (assist, lights and speed limit don't change).
 
 - **No timeout.** The menu stays open until you exit it, even while riding.
 - It opens on the first item every time; the last position isn't remembered.
+- **Choice screens** (Lights): the choices side by side, the highlighted one inverted. It opens on the current one; LEFT/RIGHT move (wrapping), M sets it and returns to the item, PWR (esc) returns without a change.
 - **Detail screens** (BLE status, diagnostics, firmware version): PWR (esc) returns to the item. Inside diagnostics, LEFT/RIGHT page through the values when there's more than one screen of them.
 
 ### Items (in ring order)
 
 | # | Item | Icon | Function | Confirm |
 |---|---|---|---|---|
-| 1 | **Reset trip** | circular arrow | Zeroes the manual trip counter. Battery trip and ride counters reset themselves. | **Yes**: "Reset trip?" M = yes, PWR = cancel. After a reset, a short "done" toast returns to the item. |
-| 2 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
-| 3 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count. | — |
-| 4 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
-| 5 | **Reboot to DFU** | download arrow | Reboots into casainho's bootloader in BLE DFU mode, as a fallback if the phone can't trigger an update over the air. Motor assist stops until the display comes back up, hence the confirmation. | **Yes**: "Reboot to DFU?" M = yes, PWR = cancel. |
+| 1 | **Lights** | light bulb | Choice screen: **OFF / ON / AUTO** (§3.5). The label shows the mode in use (`Lights: AUTO`); the screen also shows the phone's time and when AUTO switches. | — (M sets, PWR cancels) |
+| 2 | **Reset trip** | circular arrow | Zeroes the manual trip counter. Battery trip and ride counters reset themselves. | **Yes**: "Reset trip?" M = yes, PWR = cancel. After a reset, a short "done" toast returns to the item. |
+| 3 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
+| 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count. | — |
+| 5 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
+| 6 | **Reboot to DFU** | download arrow | Reboots into casainho's bootloader in BLE DFU mode, as a fallback if the phone can't trigger an update over the air. Motor assist stops until the display comes back up, hence the confirmation. | **Yes**: "Reboot to DFU?" M = yes, PWR = cancel. |
 
 Not in the menu, on purpose: **Lock** (it's PWR double-click, §4). PINs, wheel size, speed limits and motor type are compile-time
 constants. Brightness follows the light state automatically. The speed-limit encoding test (§6) is done by reflashing, not with a menu item.
@@ -370,7 +399,7 @@ The lock is an anti-theft measure for **short stops**. It controls **assist only
 | `odo_max_x10` | u16 | All-time max speed, km/h × 10 |
 | `trip_batt_soc_min` | u8 | Lowest battery % during the current battery trip |
 
-The ride counter and its max/avg (since boot) live in RAM only. Lights are **not** persisted: they're off at boot.
+The ride counter and its max/avg (since boot) live in RAM only. The lights mode and the phone's time are **not** persisted: lights are OFF at boot (§3.5).
 
 The odometer should survive a layout-version bump. Migration code copies
 `odo_m` across versions, because losing the odometer on a firmware update is
@@ -448,6 +477,7 @@ M dismisses the screen. It comes back after **10 s** if the condition is still p
 | Telemetry | In scope. Stream speed, power, battery, PAS, speed limit, trips with max/avg, odo to the phone. |
 | Player control | In scope (firmware side). Volume, prev/next track, play/pause. |
 | Gate opener | In scope (firmware side). The gate A / gate B commands are sent to the phone, which does the actual opening. |
+| Time sync | In scope. The phone writes its local time and today's sunset and sunrise, for the lights' AUTO mode (§3.5). |
 | Companion app | **Out of scope.** This doc defines the BLE GATT service; the app comes later. `swang-stodva-app` may be a starting point. |
 
 ### Goal: zero-touch connection
@@ -486,6 +516,7 @@ The phone app does most of the auto-connect work. These are hard requirements:
   and command handling alive while the phone is locked in a pocket. On iOS: the
   `bluetooth-central` background mode plus a pending `connect()`.
 - On every connect, subscribe to the telemetry and command characteristics again (no bonding means no saved subscriptions).
+- On every connect, and every 10 minutes while connected, **send the time sync** (local time, today's sunset and sunrise; TECH_DESIGN §9.5).
 - Start at phone boot, and survive app swipe-away.
 - The command handlers (media keys for the player, gate actions) must work with the screen locked.
 
@@ -494,6 +525,7 @@ The phone app does most of the auto-connect work. These are hard requirements:
 - telemetry characteristic (notify, ~1 Hz: speed, power, battery %, PAS, speed limit, odo, error)
 - trips characteristic (notify, every 5 s: distance, max, avg and Ah for each of the 3 trips, plus odometer and all-time max)
 - command characteristic (display → phone notify: player vol−/vol+, prev/next track, play/pause, gate A, gate B)
+- control characteristic (phone → display write: DFU request, time sync)
 - standard Device Information service (firmware version)
 
 The exact byte layout belongs in a separate implementation spec. Unlocking and
@@ -611,3 +643,4 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-07 | Owner, second look: boot text in two rows (SWET102 / version), slide in → hold 1.2 s → slide out (≈ 2.6 s in all; the scroll was too fast to read); the PAS number slides horizontally like the pages |
 | 2026-10-07 | Version row in smaller text than SWET102, so `v<version>` always fits (no dropped "v") |
 | 2026-10-11 | Player page: the tile shows the sent action (speaker −/+, skip back/forward, play/pause) for 1 s instead of the note; nothing when no phone took the command |
+| 2026-10-12 | Lights page removed (ring PAS → Player → Gate). Lights are a menu item, first in the ring, with OFF / ON / AUTO (choice screen: L/R pick, M set, PWR cancel); RAM only, OFF at power-on. AUTO = on from sunset − 20 min until sunrise, from the phone's time sync (local time + today's sunset/sunrise, on connect and every 10 min); off without a time. The first sync after power-on switches to AUTO unless the rider has picked a mode; a pick always wins. Small bulb on the ride screen while the lights are on |

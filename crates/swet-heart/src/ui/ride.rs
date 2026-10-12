@@ -19,14 +19,13 @@ const BAT_X: i32 = 116;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Pas,
-    Lights,
     Player,
     Gate,
 }
 
 impl Page {
     /// Ring order (PRODUCT §3.1).
-    const RING: [Page; 4] = [Page::Pas, Page::Lights, Page::Player, Page::Gate];
+    const RING: [Page; 3] = [Page::Pas, Page::Player, Page::Gate];
 
     fn next(self) -> Page {
         let i = Self::RING.iter().position(|&p| p == self).unwrap_or(0);
@@ -46,7 +45,7 @@ impl Page {
         match self {
             // LEFT hold at level 0 = walk assist
             Page::Pas => cfg.with(Btn::Left, HOLD),
-            Page::Lights | Page::Gate => cfg,
+            Page::Gate => cfg,
             // hold = previous / next track, RIGHT double = play / pause;
             // only RIGHT waits for a double-click, so volume − stays instant
             Page::Player => cfg.with(Btn::Left, HOLD).with(
@@ -133,7 +132,6 @@ pub const ACTION_MS: u32 = 1000;
 enum TileGlyph {
     Pas(u8),
     Walk,
-    Lights(bool),
     Player,
     /// What the Player page just sent, for `ACTION_MS` (replaces the note).
     Action(PlayerAction),
@@ -145,7 +143,6 @@ impl TileGlyph {
         match page {
             Page::Pas if m.walk => TileGlyph::Walk,
             Page::Pas => TileGlyph::Pas(m.pas),
-            Page::Lights => TileGlyph::Lights(m.lights),
             Page::Player => TileGlyph::Player,
             Page::Gate => TileGlyph::Gate,
         }
@@ -293,6 +290,9 @@ impl RideScreen {
             }
             None => render_pane(f, self.view, m, 0),
         }
+        if m.lights {
+            lights_mark(f);
+        }
         render_battery(f, m);
     }
 
@@ -328,16 +328,6 @@ fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32) {
             let gy = y + (h - i32::from(W95.height)) / 2;
             f.text(&W95, s, x + (w - gw) / 2, gy, 0, Mode::Clear);
         }
-        TileGlyph::Lights(on) => {
-            let (art, label): (&Glyph, &[u8]) = if on {
-                (&BULB_ON, b"ON")
-            } else {
-                (&BULB_OFF, b"OFF")
-            };
-            glyph(f, art, x + (w - GLYPH_W) / 2, y + 9, false);
-            let lw = label.len() as i32 * 4 - 1;
-            f.text3x5(x + (w - lw) / 2, y + 50, label, 1, Mode::Clear);
-        }
         // without a subscribed phone the command pages are dithered and
         // ignore LEFT/RIGHT (PRODUCT §3.1)
         TileGlyph::Player => glyph(f, &NOTE, x + (w - GLYPH_W) / 2, y + 20, !m.commands),
@@ -370,44 +360,6 @@ fn glyph(f: &mut Frame, art: &Glyph, x: i32, y: i32, dither: bool) {
         }
     }
 }
-
-const BULB_OFF: Glyph = [
-    b"...#####...",
-    b"..#.....#..",
-    b".#.......#.",
-    b"#.........#",
-    b"#.........#",
-    b"#.........#",
-    b"#.........#",
-    b".#.......#.",
-    b"..#.....#..",
-    b"...#...#...",
-    b"...#####...",
-    b"...........",
-    b"...#####...",
-    b"...........",
-    b"....###....",
-    b"...........",
-];
-
-const BULB_ON: Glyph = [
-    b"...#####...",
-    b"..#######..",
-    b".#########.",
-    b"###########",
-    b"###########",
-    b"###########",
-    b"###########",
-    b".#########.",
-    b"..#######..",
-    b"...#####...",
-    b"...#####...",
-    b"...........",
-    b"...#####...",
-    b"...........",
-    b"....###....",
-    b"...........",
-];
 
 const NOTE: Glyph = [
     b"....#######",
@@ -453,6 +405,24 @@ fn up_arrow(f: &mut Frame, cx: i32, cy: i32, mode: Mode) {
         f.hline(cx - i, cy - 14 + i, 2 * i + 1, mode);
     }
     f.fill_rect(cx - 4, cy - 4, 9, 18, mode);
+}
+
+/// The lights are on (PRODUCT §3.5): a small bulb in the pane's top-right
+/// corner, which no view uses. Drawn over the pane, so it stays put while
+/// the views slide.
+fn lights_mark(f: &mut Frame) {
+    const ROWS: [&[u8; 5]; 7] = [
+        b".###.", b"#####", b"#####", b"#####", b".###.", b".....", b".###.",
+    ];
+    let (x, y) = (PANE_X + PANE_W - 6, 0);
+    f.fill_rect(x - 1, y, 7, 8, Mode::Clear);
+    for (r, row) in ROWS.iter().enumerate() {
+        for (c, &px) in row.iter().enumerate() {
+            if px == b'#' {
+                f.pixel(x + c as i32, y + r as i32, Mode::Set);
+            }
+        }
+    }
 }
 
 /// Big number centred in the pane with a small unit underneath.

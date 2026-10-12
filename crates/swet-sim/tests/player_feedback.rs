@@ -69,7 +69,7 @@ fn leaving_the_page_ends_the_icon() {
     let mut s = on_player(true);
     s.click(Buttons::LEFT);
     // round the ring and back within the second
-    for _ in 0..4 {
+    for _ in 0..3 {
         s.press(Buttons::M);
         s.run_ms(60);
         s.release(Buttons::M);
