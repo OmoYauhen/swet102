@@ -113,7 +113,7 @@ The page ring order is fixed at compile time: PAS → Player → Gate. Pages tha
 
 #### Page tile glyphs
 
-The tile is about 25 px wide and nearly the full 64 px tall. The glyph is black, centered on the white tile.
+The tile is about 25 px wide and 48 px tall, under the clock row (§3.6). The glyph is black, centered on the white tile.
 
 | Page | Glyph |
 |---|---|
@@ -247,6 +247,13 @@ with three choices:
   telemetry lights flag.
 - The menu item's label shows the mode (`Lights: AUTO`); while the lights are
   on, a small bulb sits in the top-right corner of the info pane.
+
+### 3.6 Clock
+
+The local time, **HH:MM** (24 h) in W95FA (9 px tall, the PAS number's
+font), centred above the page tile in the top 16 px of column 1. It shows only while a **phone is
+connected** and has sent the time (§3.5); otherwise the row stays empty.
+The time keeps running from the last sync, the same clock AUTO lights use.
 
 ---
 

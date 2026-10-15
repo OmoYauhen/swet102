@@ -299,7 +299,8 @@ struct Ui { stack: heapless::Vec<Screen, 4>, popup: Option<Popup>, … }
 
 | Widget | Area (x, y, w, h) | Notes |
 |---|---|---|
-| Tile | 0, 0, 26, 64 | White rounded rect (r = 4), black glyph centered |
+| Clock | 0, 0, 26, 16 | HH:MM, `W95_CLOCK` (W95FA ×1, 9 px), centred; only while connected and the time is known (`Model::clock_min`) |
+| Tile | 0, 16, 26, 48 | White rounded rect (r = 4), black glyph centered |
 | Pane | 28, 0, 86, 64 | One of 6 views; label + value |
 | Battery | 116, 0, 12, 64 | Icon (fill = SoC), XOR bolt in sport, `%` below |
 
@@ -1152,3 +1153,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-12 | Lights page removed (`Page` = Pas, Player, Gate). `lights.rs`: `LightsMode` Off/On/Auto + `DayClock`, RAM only, zero-initialised (OFF, no time); menu item `Item::Lights` (first) opens `Screen::Lights` (L/R choice, M set, PWR cancel). `state.lights` is now derived every tick from `lights.on(now)` |
 | 2026-10-12 | Control message `T` (9 B: secs_of_day u32, sunset_min u16, sunrise_min u16; strict length and ranges) next to `DFU!`; the clock runs on the tick between syncs; AUTO = `t ≥ sunset − LIGHTS_LEAD_MIN (20) or t < sunrise`. The first valid sync after power-on switches to AUTO unless the rider already picked a mode. `ble.c` needs no change: the control value takes 20 B |
 | 2026-10-12 | Menu item `Item::Thanks` (last) opens `Screen::Thanks` (`ui/thanks.rs`, zero-initialised `Thanks`: index, previous index, direction, one `Tween`). The boot's slide curves are now `boot::slide_in` / `slide_out`, shared; `Tween::elapsed` gives the raw time for such two-phase animations. Names in W95FA from `swet-assets` (`W95_NICK`, native size, lowercase + `@` `_`), drawn ×2: the largest scale at which the longest name fits. The pixel-font rasteriser now draws glyphs 8 px right of the canvas edge (`PAD`), so ink left of the grid origin (the tail of `y`) is no longer clipped; `W95` comes out unchanged |
+| 2026-10-15 | Clock above the page tile (PRODUCT §3.6): the tile shrinks to 0, 16, 26, 48 (note/key/action glyphs re-centred from `h / 2`); the clock is in `W95_CLOCK` (W95FA at ×1, `0-9:`, 9 px, `HH:MM` ≤ 25 px); `Model::clock_min` = `lights.clock` minutes while `BleState::CONNECTED`, else `None` (nothing drawn). No new state, reuses the AUTO lights `DayClock` |

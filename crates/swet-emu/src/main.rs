@@ -545,6 +545,8 @@ fn report_gif(r: record::Recorder) {
 fn demo_gif(path: &str) {
     let mut sim = Sim::booting(None);
     sim.phone_connect();
+    // afternoon: the clock shows above the tile, AUTO keeps the lights off
+    sim.phone_send_time(14 * 3600 + 5 * 60, 19 * 60, 7 * 60);
     sim.motor().set_speed_kmh(23);
     sim.motor().current_x2 = 16;
     let mut rec = match record::Recorder::create(std::path::Path::new(path)) {

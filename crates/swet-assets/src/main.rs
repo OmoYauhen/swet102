@@ -159,6 +159,15 @@ const PIXEL_FONTS: &[PixelFontSrc] = &[
         x_origin: 50.0,
         scale: 1,
     },
+    PixelFontSrc {
+        // W95FA at its own size: the HH:MM clock above the page tile.
+        name: "W95_CLOCK",
+        file: "fonts/W95FA.otf",
+        chars: "0123456789:",
+        unit: 80.0,
+        x_origin: 50.0,
+        scale: 1,
+    },
 ];
 
 /// Rasterise each char on the font's pixel grid, crop each glyph to its ink
