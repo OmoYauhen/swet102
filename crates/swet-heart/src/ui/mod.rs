@@ -91,6 +91,9 @@ pub struct Model {
     pub lights: bool,
     /// A phone is subscribed to commands: Player and Gate work.
     pub commands: bool,
+    /// Local time of day in minutes, while a phone is connected and has
+    /// synced the time; `None` otherwise (nothing shown above the tile).
+    pub clock_min: Option<u16>,
     pub trip: crate::rides::Trip,
     pub batt: crate::rides::Trip,
     pub ride: crate::rides::Trip,

@@ -3,13 +3,13 @@
 use super::Model;
 use super::anim::{Tween, travel};
 use crate::blep::Command;
-use crate::gfx::assets::{SMALL, SPEED, W95};
+use crate::gfx::assets::{SMALL, SPEED, W95, W95_CLOCK};
 use crate::gfx::{Frame, H, Mode, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
 use crate::rides::Trip;
 
-/// Column 1: white rounded tile.
-const TILE: (i32, i32, i32, i32) = (0, 0, 26, 64);
+/// Column 1: white rounded tile, under the clock row.
+const TILE: (i32, i32, i32, i32) = (0, 16, 26, 48);
 /// Column 2.
 const PANE_X: i32 = 28;
 const PANE_W: i32 = 86;
@@ -293,6 +293,7 @@ impl RideScreen {
         if m.lights {
             lights_mark(f);
         }
+        render_clock(f, m);
         render_battery(f, m);
     }
 
@@ -330,11 +331,12 @@ fn draw_glyph(f: &mut Frame, g: TileGlyph, m: &Model, dx: i32) {
         }
         // without a subscribed phone the command pages are dithered and
         // ignore LEFT/RIGHT (PRODUCT §3.1)
-        TileGlyph::Player => glyph(f, &NOTE, x + (w - GLYPH_W) / 2, y + 20, !m.commands),
-        TileGlyph::Gate => glyph(f, &KEY, x + (w - GLYPH_W) / 2, y + 17, !m.commands),
+        // offsets centre each glyph's drawn rows in the tile
+        TileGlyph::Player => glyph(f, &NOTE, x + (w - GLYPH_W) / 2, y + h / 2 - 12, !m.commands),
+        TileGlyph::Gate => glyph(f, &KEY, x + (w - GLYPH_W) / 2, y + h / 2 - 15, !m.commands),
         TileGlyph::Action(a) => {
             if let Some(art) = a.art() {
-                glyph(f, art, x + (w - GLYPH_W) / 2, y + 18, false);
+                glyph(f, art, x + (w - GLYPH_W) / 2, y + h / 2 - 14, false);
             }
         }
     }
@@ -423,6 +425,24 @@ fn lights_mark(f: &mut Frame) {
             }
         }
     }
+}
+
+/// HH:MM above the tile (PRODUCT §3.6), only while a phone is connected and
+/// has sent the time.
+fn render_clock(f: &mut Frame, m: &Model) {
+    let Some(min) = m.clock_min else { return };
+    let (h, mm) = (min / 60 % 24, min % 60);
+    let s = [
+        b'0' + (h / 10) as u8,
+        b'0' + (h % 10) as u8,
+        b':',
+        b'0' + (mm / 10) as u8,
+        b'0' + (mm % 10) as u8,
+    ];
+    let (x, y, w, _) = TILE;
+    let tw = W95_CLOCK.width(&s, 1);
+    let ty = (y - i32::from(W95_CLOCK.height)) / 2;
+    f.text(&W95_CLOCK, &s, x + (w - tw) / 2, ty, 1, Mode::Set);
 }
 
 /// Big number centred in the pane with a small unit underneath.

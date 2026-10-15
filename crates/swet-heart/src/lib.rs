@@ -700,6 +700,10 @@ impl<H: Hal> App<H> {
             sport: self.state.is_sport(),
             lights: self.state.lights,
             commands: self.hal.ble_state().0 & BleState::COMMAND_SUB != 0,
+            clock_min: (self.hal.ble_state().0 & BleState::CONNECTED != 0)
+                .then(|| self.lights.clock.secs_of_day(self.now))
+                .flatten()
+                .map(|s| (s / 60) as u16),
             trip: self.rides.trip,
             batt: self.rides.batt,
             ride: self.rides.ride,
