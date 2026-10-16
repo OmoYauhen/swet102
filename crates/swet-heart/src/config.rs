@@ -20,6 +20,9 @@ pub const HOLD_MS: u32 = 1000;
 pub const WHEEL_MM: u32 = 2165;
 /// Nominal pack voltage for watts = amps × volts (stock firmware reports no voltage).
 pub const PACK_V: u32 = 52;
+/// Battery sense divider (top, bottom) in kΩ: 300k/16k as reported for the
+/// SW102, uncalibrated (TECH_DESIGN §16). Shown on Diagnostics only.
+pub const VBAT_DIVIDER_K: (u32, u32) = (300, 16);
 pub const PAS_MAX: u8 = 9;
 /// City limit; the sport PIN stores `SPORT_LIMIT_KMH` (PRODUCT §6).
 pub const CITY_LIMIT_KMH: u8 = 25;

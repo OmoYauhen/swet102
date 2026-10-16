@@ -177,6 +177,7 @@ int main(void)
             measure(t0);
             if (done % 5 == 0) {
                 g_diag.stack_free = stack_free_bytes();
+                hal_vbat_poll();
             }
             /* Each finished tick is progress. Feeding only after catching up
              * starved the watchdog whenever ticks took ~20 ms (M1 on hardware:

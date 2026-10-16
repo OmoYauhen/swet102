@@ -67,6 +67,9 @@ pub enum Diag {
     StoreErrors = 9,
     /// BLE notifications the SoftDevice had no buffer for (dropped).
     BleDropped = 10,
+    /// Battery sense ADC, raw 10-bit counts (1023 = 3.6 V on the pin), last
+    /// 100 ms sample; 0 before the first one.
+    VbatAdc = 11,
 }
 
 pub trait Hal {

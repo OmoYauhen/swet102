@@ -727,6 +727,7 @@ impl<H: Hal> App<H> {
             lcd_max_us: h.diag(Diag::FlushMaxUs),
             saves: self.saver.writes,
             store_errors: h.diag(Diag::StoreErrors),
+            vbat_adc: h.diag(Diag::VbatAdc),
             motor: self.motor.diag,
             values: self.motor.values,
         }

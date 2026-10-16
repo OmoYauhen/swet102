@@ -36,6 +36,8 @@ pub struct SimHal {
     pub ble_values: [Vec<u8>; 3],
     pub powered_off: bool,
     pub dfu_requested: bool,
+    /// Battery sense, raw ADC counts (`Diag::VbatAdc`).
+    pub vbat_adc: u32,
 }
 
 impl Hal for SimHal {
@@ -104,6 +106,7 @@ impl Hal for SimHal {
         match d {
             Diag::RamKb => 32,
             Diag::SdRamBase => 0x2000_2C00,
+            Diag::VbatAdc => self.vbat_adc,
             _ => 0,
         }
     }

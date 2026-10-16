@@ -15,6 +15,8 @@ void lcd_contrast(uint8_t level);
 
 /* hal.c */
 void hal_init(void);
+/* Every 100 ms: latch the last battery-sense conversion, start the next. */
+void hal_vbat_poll(void);
 
 /* ble.c */
 void ble_init(void);
@@ -37,6 +39,7 @@ struct platform_diag {
     uint32_t flush_max_us;
     uint32_t store_errors;
     uint32_t ble_dropped;
+    uint32_t vbat_adc;
 };
 extern struct platform_diag g_diag;
 

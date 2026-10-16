@@ -18,6 +18,10 @@
 #define PIN_BTN_M        14  /* pull-up, active low */
 #define PIN_BTN_PWR      10  /* no pull, active high */
 
+/* Battery sense: AIN2 (P0.01) behind a 300k/16k divider from the supply
+ * (SS adc.c, from @LowPerformer; unconfirmed on PET, TECH_DESIGN §16). */
+#define VBAT_AIN         ADC_CONFIG_PSEL_AnalogInput2
+
 #define PIN_UART_TX      12
 #define PIN_UART_RX      11
 
