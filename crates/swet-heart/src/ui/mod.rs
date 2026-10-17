@@ -29,9 +29,6 @@ pub enum Screen {
     Firmware,
     /// Power-on animation; then `Ride` or `Pin` (PRODUCT §3.4).
     Boot,
-    /// Menu → Update (or `DFU!` from the phone): hold PWR to restart into
-    /// the bootloader's update mode.
-    Update,
     /// Menu → Lights: pick OFF / ON / AUTO.
     Lights,
     /// Menu → Special thanks: the names, LEFT/RIGHT to step through them.
@@ -109,10 +106,6 @@ pub enum Overlay {
     None,
     Padlock,
     Dark,
-    /// Rebooting into the bootloader's update mode: what to do next. The
-    /// bootloader doesn't drive the OLED, so this stays on screen while it
-    /// keeps power.
-    Update,
 }
 
 /// Everything one frame needs.
@@ -147,7 +140,6 @@ pub fn render(f: &mut Frame, s: &Scene) {
     f.clear();
     match s.overlay {
         Overlay::Dark => return,
-        Overlay::Update => return menu::render_update_hold(f),
         Overlay::Padlock => return pin::render_padlock(f),
         Overlay::None => {}
     }
@@ -163,7 +155,6 @@ pub fn render(f: &mut Frame, s: &Scene) {
         Screen::Ble => menu::render_ble(f, &s.ble),
         Screen::Firmware => menu::render_firmware(f),
         Screen::Boot => boot::render(f, s.boot_elapsed),
-        Screen::Update => menu::render_update_arm(f),
         Screen::Lights => menu::render_lights(f, s.menu.choice(), s.lights, s.now),
         Screen::Thanks => s.thanks.render(f, s.now),
     }

@@ -10,7 +10,7 @@ use crate::store::Record;
 /// km/h × 10 that two consecutive readings may differ by for a new max to count.
 const MAX_AGREE_X10: u16 = 50;
 /// Battery % rise that means "the pack was charged".
-const CHARGE_RISE: u8 = 10;
+const CHARGE_RISE: u8 = 20;
 /// Identical SoC readings in a row before the battery-trip rule trusts one.
 const SOC_STABLE: u8 = 3;
 
@@ -232,7 +232,7 @@ impl Rides {
     }
 
     /// Battery-trip rule (PRODUCT §3.2): follow the lowest SoC down; a rise of
-    /// 10 % or more means the pack was charged.
+    /// 20 % or more means the pack was charged.
     fn on_soc(&mut self, soc: u8) -> Option<u16> {
         if soc == self.soc_last {
             self.soc_same = self.soc_same.saturating_add(1);
@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn battery_trip_resets_on_a_10_percent_rise() {
+    fn battery_trip_resets_on_a_20_percent_rise() {
         let mut r = Rides::new();
         let mut now = 0;
         assert_eq!(
@@ -371,9 +371,9 @@ mod tests {
         assert_eq!(soc(&mut r, &mut now, 40, 3), None);
         assert_eq!(r.soc_min, 40);
         assert_eq!(
-            soc(&mut r, &mut now, 49, 3),
+            soc(&mut r, &mut now, 59, 3),
             None,
-            "+9 % is a top-up, not a charge"
+            "+19 % is a top-up, not a charge"
         );
         assert_eq!(soc(&mut r, &mut now, 95, 3), Some(427));
         assert_eq!((r.batt.m, r.soc_min), (0, 95));

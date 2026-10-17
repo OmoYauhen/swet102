@@ -8,7 +8,7 @@
 //!   after a reset.
 //! - **Command**: `[seq, code]`, once per button press, only while the phone
 //!   is subscribed to it. Fire-and-forget: nothing is queued or retried.
-//! - **Control** (phone → display): `DFU!`, or a 9-byte time sync (`T`).
+//! - **Control** (phone → display): a 9-byte time sync (`T`).
 //!
 //! `Hal::ble_notify` publishes a value: it becomes what a read returns and is
 //! notified to a subscribed phone. All payloads are little-endian and fit the
@@ -30,9 +30,6 @@ pub const TRIPS_MS: u32 = 5000;
 pub const ERROR_LINK_LOST: u8 = 0xFF;
 /// `soc` byte before the first battery reading.
 pub const SOC_UNKNOWN: u8 = 0xFF;
-
-/// The phone wrote this to the control characteristic: reboot into DFU.
-pub const CONTROL_DFU: &[u8] = b"DFU!";
 
 /// Control message: the phone's local time and today's sun (TECH_DESIGN §9.5).
 /// `[b'T', secs_of_day u32, sunset_min u16, sunrise_min u16]`, little-endian.
@@ -287,7 +284,7 @@ mod tests {
 
         assert_eq!(parse_time_sync(&b[..8]), None, "short");
         assert_eq!(parse_time_sync(&[&b[..], &[0]].concat()), None, "long");
-        assert_eq!(parse_time_sync(b"DFU!"), None);
+        assert_eq!(parse_time_sync(b"ping"), None);
         let bad = |i: usize, v: &[u8]| {
             let mut x = b;
             x[i..i + v.len()].copy_from_slice(v);

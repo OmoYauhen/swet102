@@ -71,7 +71,7 @@ All of these live in one config header. Changing one means rebuilding the firmwa
 | City speed limit | 25 km/h |
 | Sport speed limit | protocol max (99) |
 | City PIN / Sport PIN | 4 digits each, passed at build time via Nix build arg / env (`SWET_PIN_CITY`, `SWET_PIN_SPORT`); never stored in the repo. The build fails if they're unset. |
-| Auto power-off idle time | 5 min |
+| Auto power-off idle time | 10 min |
 | Assist levels | 0–9, plus walk assist |
 | M double-click window / hold time | 350 ms / 1 s |
 
@@ -167,8 +167,8 @@ accumulator approach as Swang Stodva's `rt_calc_odometer()`.
 
 - EEPROM stores `trip_batt` (km) and `trip_batt_soc_min`, the lowest battery % seen during this battery trip.
 - While riding, `trip_batt_soc_min` follows the battery % down.
-- When battery % rises to **`trip_batt_soc_min` + 10 % or more**, the pack has been charged: `trip_batt` resets to 0 and `trip_batt_soc_min` is set to the current %.
-- The 10 % threshold also ignores small top-ups. That's intended.
+- When battery % rises to **`trip_batt_soc_min` + 20 % or more**, the pack has been charged: `trip_batt` resets to 0 and `trip_batt_soc_min` is set to the current %.
+- The 20 % threshold also ignores small top-ups. That's intended.
 - before reset the battery trip, show the message "popup" (same logic as for error) "Trip on last battery charge was X km!". any button to continue
 
 ### 3.3 Battery (column 3)
@@ -331,10 +331,9 @@ normally (assist and speed limit don't change; the lights follow their mode).
 | 3 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
 | 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count, and the battery sense ADC (raw counts and volts through the nominal divider, unconfirmed on hardware). | — |
 | 5 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
-| 6 | **Reboot to DFU** | download arrow | Reboots into casainho's bootloader in BLE DFU mode, as a fallback if the phone can't trigger an update over the air. Motor assist stops until the display comes back up, hence the confirmation. | **Yes**: "Reboot to DFU?" M = yes, PWR = cancel. |
-| 7 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
+| 6 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
 
-Not in the menu, on purpose: **Lock** (it's PWR double-click, §4). PINs, wheel size, speed limits and motor type are compile-time
+Not in the menu, on purpose: **Lock** (it's PWR double-click, §4) and **firmware update** (entered by hand in the bootloader, §9). PINs, wheel size, speed limits and motor type are compile-time
 constants. Brightness follows the light state automatically. The speed-limit encoding test (§6) is done by reflashing, not with a menu item.
 
 ---
@@ -428,7 +427,7 @@ From `src/eeprom_internal.h` (layout `0x47`):
 | `ui8_units_type` | Drop: metric only |
 | `ui8_time_field_enable` | Drop: no clock on screen |
 | `ui8_number_of_assist_levels` | Drop: fixed 0–9 |
-| `ui8_lcd_power_off_time_minutes` | Drop: fixed 5 min |
+| `ui8_lcd_power_off_time_minutes` | Drop: fixed 10 min |
 | `ui8_lcd_backlight_on/off_brightness` | Drop: fixed constants, chosen by light state |
 | `ui8_walk_assist_feature_enabled` | Drop: always on |
 | `ui8_street_mode_speed_limit` | **Replaced** by `speed_limit`, set by which PIN unlocked the bike |
@@ -474,7 +473,7 @@ M dismisses the screen. It comes back after **10 s** if the condition is still p
 ### Power
 
 - PWR hold: on / off. PWR double-click: lock + off (§6).
-- **Auto power-off** after **5 min** with no speed, no motor current and no button presses.
+- **Auto power-off** after **10 min** with no speed, no motor current and no button presses.
 - State is saved on every change that matters (pas, speed limit, lock) and on power-off.
 
 ---
@@ -483,7 +482,7 @@ M dismisses the screen. It comes back after **10 s** if the condition is still p
 
 | Feature | Scope |
 |---|---|
-| OTA firmware update | In scope. **Keep casainho's bootloader + SoftDevice S130**, with the same flash layout and DFU `.zip` format as Swang Stodva. You can switch firmwares over BLE. |
+| OTA firmware update | In scope. **Keep casainho's bootloader + SoftDevice S130**, with the same flash layout and DFU `.zip` format as Swang Stodva. You can switch firmwares over BLE. Entered **by hand only**: display off, hold M + PWR ~8 s, the bootloader advertises `SW102_DFU`, then the app's OTA tab (or nRF Toolbox) sends the zip. The display reports its build number (`VERSION_NUM`) so the app can compare it with the zip first. |
 | Telemetry | In scope. Stream speed, power, battery, PAS, speed limit, trips with max/avg, odo to the phone. |
 | Player control | In scope (firmware side). Volume, prev/next track, play/pause. |
 | Gate opener | In scope (firmware side). The gate A / gate B commands are sent to the phone, which does the actual opening. |
@@ -535,8 +534,8 @@ The phone app does most of the auto-connect work. These are hard requirements:
 - telemetry characteristic (notify, ~1 Hz: speed, power, battery %, PAS, speed limit, odo, error)
 - trips characteristic (notify, every 5 s: distance, max, avg and Ah for each of the 3 trips, plus odometer and all-time max)
 - command characteristic (display → phone notify: player vol−/vol+, prev/next track, play/pause, gate A, gate B)
-- control characteristic (phone → display write: DFU request, time sync)
-- standard Device Information service (firmware version)
+- control characteristic (phone → display write: time sync)
+- standard Device Information service (firmware version, build number)
 
 The exact byte layout belongs in a separate implementation spec. Unlocking and
 changing the speed limit from the phone are **not** supported: the PIN on the display is the only way.
@@ -655,3 +654,5 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-11 | Player page: the tile shows the sent action (speaker −/+, skip back/forward, play/pause) for 1 s instead of the note; nothing when no phone took the command |
 | 2026-10-12 | Menu item **♥ Special thanks**, last in the ring (heart icon; the 1-bit display has no ❤️ emoji, and the label has no heart of its own). M opens it: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, as written, centred; LEFT/RIGHT step (wrapping), PWR back. Each name comes and goes with the boot animation's slides (in from the right on opening; a step slides the old name out, then the new one in; LEFT mirrors it). Font: W95FA at 2×, the largest scale at which `@entropia_pl` fits (126 of 128 px with the font's own 1-pixel spacing), the same for all three names |
 | 2026-10-12 | Lights page removed (ring PAS → Player → Gate). Lights are a menu item, first in the ring, with OFF / ON / AUTO (choice screen: L/R pick, M set, PWR cancel); RAM only, OFF at power-on. AUTO = on from sunset − 20 min until sunrise, from the phone's time sync (local time + today's sunset/sunrise, on connect and every 10 min); off without a time. The first sync after power-on switches to AUTO unless the rider has picked a mode; a pick always wins. Small bulb on the ride screen while the lights are on |
+| 2026-10-17 | No firmware-triggered DFU: the menu item (Update / Reboot to DFU) and the phone's DFU request are gone, since none of the ways in worked for the owner. Updates are entered by hand (display off, M + PWR ~8 s → `SW102_DFU`) and sent from the app's OTA tab, which compares the zip's version with the build number the display reports over BLE |
+| 2026-10-17 | Auto power-off after 10 min idle (was 5); battery trip resets on a +20 % rise (was +10 %), so a partial top-up doesn't count as a charge |

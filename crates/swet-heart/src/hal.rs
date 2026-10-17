@@ -97,6 +97,5 @@ pub trait Hal {
 
     // system
     fn power_off(&mut self);
-    fn reboot_to_dfu(&mut self);
     fn diag(&self, d: Diag) -> u32;
 }

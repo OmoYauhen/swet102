@@ -66,10 +66,6 @@ pub enum Power {
     Off {
         since: u32,
     },
-    /// Dark screen; reboots into the bootloader's DFU mode once saved.
-    Dfu {
-        since: u32,
-    },
 }
 
 pub struct App<H: Hal> {
@@ -107,14 +103,9 @@ pub struct App<H: Hal> {
     contrast: u8,
     /// Time of the last tick, for calls from outside `tick()` (BLE control).
     now: u32,
-    /// Last tick with the wheel turning.
-    last_moving: u32,
     /// Power-on time and the screen the boot animation hands over to.
     boot_t0: u32,
     boot_then: Screen,
-    /// The update-mode screen has reached the display: only then reboot,
-    /// so it is what stays on the OLED while the bootloader runs.
-    update_shown: bool,
 }
 
 impl<H: Hal> App<H> {
@@ -170,10 +161,8 @@ impl<H: Hal> App<H> {
             blep: Blep::new(),
             contrast: 0,
             now: 0,
-            last_moving: 0,
             boot_t0: 0,
             boot_then: Screen::Ride,
-            update_shown: false,
         }
     }
 
@@ -198,7 +187,6 @@ impl<H: Hal> App<H> {
         self.boot_t0 = now;
         self.stack.reset(Screen::Boot);
         self.last_activity = now;
-        self.last_moving = now;
         self.now = now;
         self.motor.walk_keepalive_ms = config::WALK_KEEPALIVE_MS;
     }
@@ -238,9 +226,6 @@ impl<H: Hal> App<H> {
         self.motor.set_speed_limit_kmh(self.state.speed_limit);
         self.motor.step(&mut self.hal, now);
         self.ride_step(now);
-        if self.motor.values.rpm.is_some_and(|r| r > 0) {
-            self.last_moving = now;
-        }
         let fault = self.fault(now);
         self.popups.update(fault, now);
 
@@ -277,7 +262,6 @@ impl<H: Hal> App<H> {
             Power::On => Overlay::None,
             Power::Locking { .. } => Overlay::Padlock,
             Power::Off { .. } => Overlay::Dark,
-            Power::Dfu { .. } => Overlay::Update,
         };
         let scene = Scene {
             top: self.stack.top(),
@@ -300,8 +284,6 @@ impl<H: Hal> App<H> {
             self.sent.clone_from(&self.frame);
             self.sent_valid = true;
         }
-        // the frame just flushed (or still on the display) is the update screen
-        self.update_shown = overlay == Overlay::Update;
     }
 
     fn telemetry(&self, now: u32) -> Telemetry {
@@ -444,14 +426,6 @@ impl<H: Hal> App<H> {
                     self.hal.power_off();
                 }
             }
-            Power::Dfu { since } => {
-                if self.update_shown
-                    && (self.saver.idle(&self.hal)
-                        || now.wrapping_sub(since) >= config::SAVE_BEFORE_OFF_MS)
-                {
-                    self.hal.reboot_to_dfu();
-                }
-            }
         }
     }
 
@@ -543,7 +517,6 @@ impl<H: Hal> App<H> {
                     Item::Ble => Screen::Ble,
                     Item::Diagnostics => Screen::Diag,
                     Item::Firmware => Screen::Firmware,
-                    Item::Dfu => Screen::Update,
                     Item::Thanks => {
                         self.thanks.open(now);
                         Screen::Thanks
@@ -583,17 +556,6 @@ impl<H: Hal> App<H> {
                     }
                 }
                 (Btn::Pwr, Click) => self.stack.pop(),
-                _ => {}
-            },
-            // Update: the moment PWR goes down, save and reset while it is still
-            // held; held for 5 s, it takes the bootloader into update mode
-            // (TECH_DESIGN §9.5). Any other button goes back.
-            Screen::Update => match (ev.btn, ev.g) {
-                (Btn::Pwr, Down) => {
-                    self.saver.now(now);
-                    self.power = Power::Dfu { since: now };
-                }
-                (_, Click) => self.stack.pop(),
                 _ => {}
             },
             // any button skips the boot animation; the press does nothing else
@@ -734,21 +696,13 @@ impl<H: Hal> App<H> {
     }
 
     /// The phone wrote the control characteristic (TECH_DESIGN §9.5).
-    /// `"DFU!"` opens the Update screen, like the menu item, once the wheel
-    /// has stood still for `DFU_STOPPED_MS`. The rider still has to hold PWR:
-    /// the bootloader can't keep the display powered across a reset on its
-    /// own (TECH_DESIGN §9.5). A valid time sync (`T…`, 9 bytes) sets the
-    /// clock for the lights' AUTO mode, and the first one after power-on
-    /// switches to AUTO (PRODUCT §3.5). Anything else is ignored.
+    /// A valid time sync (`T…`, 9 bytes) sets the clock for the lights' AUTO
+    /// mode, and the first one after power-on switches to AUTO (PRODUCT §3.5).
+    /// Anything else is ignored. There is no DFU request: the rider enters the
+    /// bootloader by hand (M+PWR 8 s with the display off, §9.5).
     pub fn ble_control(&mut self, data: &[u8]) {
         if let Some(t) = blep::parse_time_sync(data) {
             self.lights.sync(&t, self.now);
-        } else if data == blep::CONTROL_DFU
-            && self.power == Power::On
-            && self.now.wrapping_sub(self.last_moving) >= config::DFU_STOPPED_MS
-            && self.stack.top() != Screen::Update
-        {
-            self.stack.push(Screen::Update);
         }
     }
 

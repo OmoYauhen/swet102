@@ -117,7 +117,6 @@ pub trait Hal {
 
     // system
     fn power_off(&mut self);                           // never returns on HW
-    fn reboot_to_dfu(&mut self);                       // never returns on HW
 }
 ```
 
@@ -143,7 +142,6 @@ uint8_t  hal_ble_state(void);                             // bit0 conn, bit1 tel
 void     hal_ble_notify(uint8_t ch, const uint8_t *buf, uint8_t len);
 void     hal_ble_address(uint8_t out[6]);
 void     hal_power_off(void);
-void     hal_reboot_to_dfu(void);
 void     hal_panic(void);                                 // reset; called by Rust's panic handler
 ```
 
@@ -154,6 +152,7 @@ void swet_init(uint32_t now_ms);
 void swet_tick(uint32_t now_ms);                         // every 20 ms, main loop only
 void swet_ble_control(const uint8_t *data, uint8_t len); // phone wrote the control char
 uint8_t swet_version(uint8_t *out, uint8_t cap);          // version string for DIS; pure, callable before init
+uint8_t swet_build_num(uint8_t *out, uint8_t cap);        // VERSION_NUM for DIS; same rules
 ```
 
 **Rules for the boundary:**
@@ -687,9 +686,9 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | Swet102 service | `8f030001-…` | |
 | Telemetry | `8f030002-…` | read, notify |
 | Command | `8f030003-…` | notify |
-| Control | `8f030004-…` | write, ≤ 20 B: `DFU!` or a 9-byte time sync (§9.5) |
+| Control | `8f030004-…` | write, ≤ 20 B: a 9-byte time sync (§9.5) |
 | Trips | `8f030005-…` | read, notify |
-| Device Information | 0x180A | firmware rev = `VERSION_STRING`, model `SW102`, manufacturer `PET` |
+| Device Information | 0x180A | firmware rev (0x2A26) = `VERSION_STRING`, software rev (0x2A28) = `VERSION_NUM` (`config::BUILD_NUM`, "-" outside `make`), model `SW102`, manufacturer `PET` |
 
 **Telemetry**: 14 bytes, little-endian, notified at 1 Hz while subscribed.
 
@@ -742,11 +741,11 @@ dithered). `seq` increments per command, so the app can drop duplicates.
 | 0x10 | gate A |
 | 0x11 | gate B |
 
-### 9.5 Control: DFU entry, time sync
+### 9.5 Control: time sync; DFU entry
 
 The phone writes the control characteristic; `ble.c` hands every write (up to
 the 20-byte value length) to `swet_ble_control()`, and `App::ble_control()`
-decides. Two messages; anything else is ignored.
+decides. One message, the time sync; anything else is ignored.
 
 #### Time sync
 
@@ -778,36 +777,26 @@ decides. Two messages; anything else is ignored.
 
 #### DFU entry
 
-SS has **no** way into DFU from the app. Today it's entered with the bootloader's
-own button combo, **M + PWR held ~8 s**, and that keeps working as a fallback.
+**Manual only.** The firmware has no way into the bootloader. The rider enters
+it with the bootloader's own button combo: display off, **M + PWR held ~8 s**,
+and it advertises `SW102_DFU`. The update then runs from swet102-app's OTA tab
+(or nRF Toolbox → DFU).
 
-- **How casainho's bootloader enters DFU** (source:
-  github.com/geeksville/SW102_LCD_Bluetooth-bootloader, nRF5 SDK 12):
-  `nrf_dfu_enter_check()` returns true when **PWR is held (M not) for 5 s** from
-  its start, or when `enter_buttonless_dfu` is set in its settings page. Only
-  then does it set the power latch (P0.09). A reset releases our latch, so
-  unless PWR is held the board loses power before the bootloader gets that far.
-  It ignores GPREGRET (0xB1 is SDK 11).
-  - Tried on hardware and dropped: GPREGRET (display off, normal boot after)
-    and the settings flag (Update screen for a second, then off; the
-    bootloader had consumed the flag, so the next power-on was normal). The
-    flag route also risks a power cut during the bootloader's own rewrite of
-    the CRC-protected settings page, which would leave the app marked invalid.
-- **Menu → Update** opens the **Update** screen: "press and hold PWR for 5 s".
-  Any other button goes back.
-  1. **PWR down**: save (≤ 500 ms), draw the second Update screen ("keep holding
-     PWR for 5 s, then nRF Toolbox → DFU → SW102_DFU; after: off, then on") and
-     flush it, then `hal_reboot_to_dfu()` (`platform/nrf51/dfu.c`), a plain
-     reset. The rider is still holding PWR, which keeps the board powered.
-  2. The bootloader sees PWR held, and after 5 s enters DFU and latches power.
-     It doesn't drive the OLED, so the last frame should stay on screen.
-     Releasing PWR earlier just switches the display off; nothing is written.
-- **From the phone:** writing `"DFU!"` to the control characteristic opens the
-  same Update screen (the rider still holds PWR). It's only accepted after the
-  wheel has been stopped for 5 s (`DFU_STOPPED_MS`; "stopped" includes no motor
-  link). `tools/ble-phone.py --dfu` does this from a PC.
+- **Version check:** the app reads the Device Information software revision
+  (0x2A28) while connected to `swet102`: `VERSION_NUM` (YYMMDDHH, from
+  `swet_build_num()`), the same number the zip's init packet carries as
+  `fw_version`. It's "-" in builds made outside `make`. The bootloader still
+  refuses anything not higher (§12).
 - **Security:** unauthenticated, and the DFU signing key is public
   (`prebuilt/private.key`). That's accepted, consistent with product §9.
+- **What was tried and dropped** (2026-10-04 … 2026-10-17): casainho's
+  bootloader (github.com/geeksville/SW102_LCD_Bluetooth-bootloader, nRF5 SDK
+  12) sets the power latch only after it decides to enter DFU, and our reset
+  releases ours first. GPREGRET 0xB1 (SDK 11) is ignored; the
+  `enter_buttonless_dfu` settings flag was consumed while the board lost power
+  (and risks a power cut mid-rewrite of the settings page); a Menu → Update
+  screen that reset while the rider held PWR (and a `DFU!` control message
+  opening it) didn't work reliably for the owner. All of it is removed.
 
 **After an update** the bootloader keeps advertising `SW102_DFU` until the display
 is powered off and started with a long PWR press (soft power latch).
@@ -898,7 +887,6 @@ is powered off and started with a long PWR press (soft power latch).
 | 1..9, 0 | inject error code / clear |
 | L | toggle motor link |
 | C | toggle "phone connected + subscribed" (B is braking) |
-| U | the phone writes `DFU!` to the control characteristic |
 | T | the phone sends a time sync (12:00 and 21:00 by turns; sunset 19:00, sunrise 07:00) |
 | F12 | PNG screenshot |
 | F11 | GIF recording |
@@ -1013,7 +1001,7 @@ The new GATT service and advertising policy (§9) are C, but written fresh.
 | M2 | Motor I/O on bike | schedule, writes, link loss/error popup, speed-limit stand test (§16) |
 | M3 | Persistence and lock | store, save policy, PIN screen, modes, battery icon bolt, power-off/auto-off |
 | M4 | Trips and menu | 3 counters, battery-trip popup, menu with all items and confirmations |
-| M5 | BLE | advertising policy, GATT, commands from Player/Gate, DFU entry |
+| M5 | BLE | advertising policy, GATT, commands from Player/Gate |
 | M6 | Polish | boot animation, page/PAS/pane slides, GIF capture; first daily-use release |
 
 ---
@@ -1086,12 +1074,12 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 1 | ~~RAM size~~ | **Resolved by the probe:** 32 KB (4 × 8 KB). The "QFAA = 16 KB" note was wrong. | — |
 | 2 | **Rust + SDK link** | duplicate builtins, code size, stack use | M0 trial |
 | 3 | **Speed-limit unit** | RPM vs km/h × 10 (product open question 1) | Stand test, both encodings |
-| 4 | **DFU entry** in casainho's bootloader | Menu and phone DFU entry depend on it | GPREGRET and the settings flag both **failed** (power latch drops on reset, §9.5). Now: Update screen, hold PWR 5 s through the reset → expect `SW102_DFU`, and see whether the screen stays on |
+| 4 | ~~DFU entry~~ in casainho's bootloader | — | **Dropped:** no firmware-triggered entry worked (§9.5). Manual only: display off, M + PWR ~8 s → `SW102_DFU` |
 | 5 | ~~SH1107 landscape remap~~ | **Resolved by the probe:** `A1 C0`, hardcoded in the LCD init sequence. | — |
 | 6 | **Walk-assist keep-alive** | Does the stock controller time out PAS 06? | Hold walk for 30 s on the stand |
 | 7 | **Error codes** | Which STATUS values stock BBSHD really sends | Unplug the speed sensor and see what STATUS reports |
 | 8 | **Auto-connect in the field** | Phone background behavior varies by vendor | Ride with the app on your own phone |
-| 9 | **DFU security** | public key + unauthenticated DFU control | Accepted |
+| 9 | **DFU security** | public signing key, unauthenticated bootloader | Accepted |
 | 10 | **M5 BLE on hardware** | GATT table must fit S130's default attribute table (else a reset loop at boot); advertising/notify untested on the chip | Boot the M5 build; `tools/ble-phone.py` sees telemetry, trips and commands |
 | 11 | **Battery sense ADC** | Real pack voltage without `bbs-fw` (better SoC, low-voltage warning). SS's dead `adc.c` read AIN2 (P0.01) behind a 300k/16k divider (from @LowPerformer), never confirmed | Diagnostics shows `VB <raw> <volts>` (`Diag::VbatAdc`, nominal divider). Compare with a multimeter at the display connector at 2–3 charge levels: proportional = divider confirmed, slope gives the real ratio; 0 or noise = wrong pin |
 
@@ -1156,3 +1144,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-12 | Menu item `Item::Thanks` (last) opens `Screen::Thanks` (`ui/thanks.rs`, zero-initialised `Thanks`: index, previous index, direction, one `Tween`). The boot's slide curves are now `boot::slide_in` / `slide_out`, shared; `Tween::elapsed` gives the raw time for such two-phase animations. Names in W95FA from `swet-assets` (`W95_NICK`, native size, lowercase + `@` `_`), drawn ×2: the largest scale at which the longest name fits. The pixel-font rasteriser now draws glyphs 8 px right of the canvas edge (`PAD`), so ink left of the grid origin (the tail of `y`) is no longer clipped; `W95` comes out unchanged |
 | 2026-10-15 | Clock above the page tile (PRODUCT §3.6): the tile shrinks to 0, 16, 26, 48 (note/key/action glyphs re-centred from `h / 2`); the clock is in `W95_CLOCK` (W95FA at ×1, `0-9:`, 9 px, `HH:MM` ≤ 25 px); `Model::clock_min` = `lights.clock` minutes while `BleState::CONNECTED`, else `None` (nothing drawn). No new state, reuses the AUTO lights `DayClock` |
 | 2026-10-16 | Battery sense on Diagnostics (§16 #11): `hal_vbat_poll()` every 100 ms in the main loop latches the last NRF_ADC conversion (10 bit, 1/3 prescale, VBG ref, AIN2) and starts the next, never waiting; `Diag::VbatAdc` = raw counts; `config::VBAT_DIVIDER_K` (300, 16) turns them into volts for the top-right `VB` readout. The title line drops `SWET102 ` to make room. Display only, nothing uses the voltage yet |
+| 2026-10-17 | DFU entry is manual only (display off, M + PWR ~8 s → `SW102_DFU`, then swet102-app's OTA tab): removed Menu → Update (`Item::Dfu`, `Screen::Update`, `Overlay::Update`, `Power::Dfu`), `DFU!` on the control characteristic, `Hal::reboot_to_dfu` / `dfu.c`. Device Information gets the software revision (0x2A28) = `VERSION_NUM` via `swet_build_num()`, so the app can compare it with the zip's `fw_version` |
