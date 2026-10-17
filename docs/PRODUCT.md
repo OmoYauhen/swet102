@@ -71,7 +71,7 @@ All of these live in one config header. Changing one means rebuilding the firmwa
 | City speed limit | 25 km/h |
 | Sport speed limit | protocol max (99) |
 | City PIN / Sport PIN | 4 digits each, passed at build time via Nix build arg / env (`SWET_PIN_CITY`, `SWET_PIN_SPORT`); never stored in the repo. The build fails if they're unset. |
-| Auto power-off idle time | 5 min |
+| Auto power-off idle time | 10 min |
 | Assist levels | 0–9, plus walk assist |
 | M double-click window / hold time | 350 ms / 1 s |
 
@@ -167,8 +167,8 @@ accumulator approach as Swang Stodva's `rt_calc_odometer()`.
 
 - EEPROM stores `trip_batt` (km) and `trip_batt_soc_min`, the lowest battery % seen during this battery trip.
 - While riding, `trip_batt_soc_min` follows the battery % down.
-- When battery % rises to **`trip_batt_soc_min` + 10 % or more**, the pack has been charged: `trip_batt` resets to 0 and `trip_batt_soc_min` is set to the current %.
-- The 10 % threshold also ignores small top-ups. That's intended.
+- When battery % rises to **`trip_batt_soc_min` + 20 % or more**, the pack has been charged: `trip_batt` resets to 0 and `trip_batt_soc_min` is set to the current %.
+- The 20 % threshold also ignores small top-ups. That's intended.
 - before reset the battery trip, show the message "popup" (same logic as for error) "Trip on last battery charge was X km!". any button to continue
 
 ### 3.3 Battery (column 3)
@@ -427,7 +427,7 @@ From `src/eeprom_internal.h` (layout `0x47`):
 | `ui8_units_type` | Drop: metric only |
 | `ui8_time_field_enable` | Drop: no clock on screen |
 | `ui8_number_of_assist_levels` | Drop: fixed 0–9 |
-| `ui8_lcd_power_off_time_minutes` | Drop: fixed 5 min |
+| `ui8_lcd_power_off_time_minutes` | Drop: fixed 10 min |
 | `ui8_lcd_backlight_on/off_brightness` | Drop: fixed constants, chosen by light state |
 | `ui8_walk_assist_feature_enabled` | Drop: always on |
 | `ui8_street_mode_speed_limit` | **Replaced** by `speed_limit`, set by which PIN unlocked the bike |
@@ -473,7 +473,7 @@ M dismisses the screen. It comes back after **10 s** if the condition is still p
 ### Power
 
 - PWR hold: on / off. PWR double-click: lock + off (§6).
-- **Auto power-off** after **5 min** with no speed, no motor current and no button presses.
+- **Auto power-off** after **10 min** with no speed, no motor current and no button presses.
 - State is saved on every change that matters (pas, speed limit, lock) and on power-off.
 
 ---
@@ -655,3 +655,4 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-12 | Menu item **♥ Special thanks**, last in the ring (heart icon; the 1-bit display has no ❤️ emoji, and the label has no heart of its own). M opens it: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, as written, centred; LEFT/RIGHT step (wrapping), PWR back. Each name comes and goes with the boot animation's slides (in from the right on opening; a step slides the old name out, then the new one in; LEFT mirrors it). Font: W95FA at 2×, the largest scale at which `@entropia_pl` fits (126 of 128 px with the font's own 1-pixel spacing), the same for all three names |
 | 2026-10-12 | Lights page removed (ring PAS → Player → Gate). Lights are a menu item, first in the ring, with OFF / ON / AUTO (choice screen: L/R pick, M set, PWR cancel); RAM only, OFF at power-on. AUTO = on from sunset − 20 min until sunrise, from the phone's time sync (local time + today's sunset/sunrise, on connect and every 10 min); off without a time. The first sync after power-on switches to AUTO unless the rider has picked a mode; a pick always wins. Small bulb on the ride screen while the lights are on |
 | 2026-10-17 | No firmware-triggered DFU: the menu item (Update / Reboot to DFU) and the phone's DFU request are gone, since none of the ways in worked for the owner. Updates are entered by hand (display off, M + PWR ~8 s → `SW102_DFU`) and sent from the app's OTA tab, which compares the zip's version with the build number the display reports over BLE |
+| 2026-10-17 | Auto power-off after 10 min idle (was 5); battery trip resets on a +20 % rise (was +10 %), so a partial top-up doesn't count as a charge |

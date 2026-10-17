@@ -99,7 +99,7 @@ to commands their glyph is dithered and LEFT / RIGHT do nothing.
 The **city PIN** unlocks with a 25 km/h limit, the **sport PIN** with 99 km/h
 (a lightning bolt in the battery icon). PAS, mode and lock survive power-off;
 the lights don't (they start OFF);
-the display switches itself off after 5 minutes without movement, motor current
+the display switches itself off after 10 minutes without movement, motor current
 or buttons.
 
 ## Bluetooth
@@ -180,7 +180,7 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | ♥ Special thanks | the last item: the people who helped, one name at a time, as written (`@entropia_pl`, `@yahor_k`, `@veganbunt`). LEFT / RIGHT step through them (it wraps); each name slides in like the boot text. PWR goes back |
 
 **Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
-by 10 % or more (and shows how far the last charge went), RIDE starts at 0 on
+by 20 % or more (and shows how far the last charge went), RIDE starts at 0 on
 every power-on. Each shows distance, max and average speed (average over moving
 time only) and the charge used in Ah; ODO shows the total and the all-time max.
 

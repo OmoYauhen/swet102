@@ -32,7 +32,7 @@ pub const SPORT_LIMIT_KMH: u8 = 99;
 /// Save settings this long after the last change.
 pub const SAVE_DEBOUNCE_MS: u32 = 3000;
 /// Power off after this long with no speed, no motor current and no buttons.
-pub const AUTO_OFF_MS: u32 = 5 * 60 * 1000;
+pub const AUTO_OFF_MS: u32 = 10 * 60 * 1000;
 /// Power-off waits at most this long for the last save to reach flash.
 pub const SAVE_BEFORE_OFF_MS: u32 = 500;
 /// The padlock shows this long before a lock powers off.
