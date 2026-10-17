@@ -9,7 +9,8 @@ use std::fmt::Write as _;
 
 fn pin(var: &str) -> Option<[u8; 4]> {
     println!("cargo:rerun-if-env-changed={var}");
-    let v = std::env::var(var).ok()?;
+    // Empty counts as unset: the Makefile exports both even without pins.env.
+    let v = std::env::var(var).ok().filter(|v| !v.is_empty())?;
     let digits: Vec<u8> = v.bytes().collect();
     if digits.len() != 4 || !digits.iter().all(u8::is_ascii_digit) {
         panic!("{var} must be exactly 4 digits");
