@@ -97,7 +97,7 @@ The screen is split into three columns:
 |---|---|---|
 | 1 — Page | ~20% | The active **page**, drawn as a **filled white tile with rounded corners**. The page glyph is drawn **black** (inverted) on top. LEFT/RIGHT act on this page. |
 | 2 — Info pane | ~70% | Riding data. Default: **speed** in a big, fun font. |
-| 3 — Battery | ~10% | Battery icon + percentage. |
+| 3 — Battery | ~10% | Pack voltage, battery icon + percentage. |
 
 ### 3.1 Pages (column 1)
 
@@ -131,7 +131,7 @@ or a dithered pattern. The exact look gets settled in the emulator.
 **M double-click** cycles the info pane in a ring:
 
 1. **Speed** (default): **04B_30 digits, 34 px** (reused from Swang Stodva, generated with `tools/ttf2font.py`), km/h. Start with this font and judge it in the emulator; a bigger font can come later.
-2. **Power**: watts = motor current × the pack voltage measured by the display's battery sense (shown top right, e.g. `54.3V`). Stock firmware doesn't report voltage; without a plausible reading (30–65 V) the watts use the nominal 52 V and no volts are shown
+2. **Power**: watts = motor current × the pack voltage measured by the display's battery sense (shown above the battery icon, §3.3). Stock firmware doesn't report voltage; without a plausible reading (30–65 V) the watts use the nominal 52 V
 3. **Trip**: manual trip, since the last reset in the menu
 4. **Battery trip**: since the last charge (auto-reset, see below)
 5. **Ride**: since this power-on (RAM only, starts at 0 on every boot)
@@ -174,6 +174,8 @@ accumulator approach as Swang Stodva's `rt_calc_odometer()`.
 ### 3.3 Battery (column 3)
 
 Battery icon plus the % reported by the stock controller. Swang Stodva has shown this value to be stable on PET, so it's used as-is, with no extra filtering or voltage-based estimate.
+
+Above the icon, in the top 16 px like the clock over the page tile (§3.6), the **pack voltage** from the display's battery sense in whole volts (`54`), in the clock's W95FA. Nothing is drawn there without a plausible reading. The icon starts at the tile's top edge, so columns 1 and 3 line up.
 
 The **battery icon also shows the riding mode**, so no separate mode badge is needed:
 
