@@ -175,7 +175,7 @@ accumulator approach as Swang Stodva's `rt_calc_odometer()`.
 
 Battery icon plus the % reported by the stock controller. Swang Stodva has shown this value to be stable on PET, so it's used as-is, with no extra filtering or voltage-based estimate.
 
-Above the icon, in the top 16 px like the clock over the page tile (§3.6), the **pack voltage** from the display's battery sense in whole volts (`54`), in the clock's W95FA. Nothing is drawn there without a plausible reading. The icon starts at the tile's top edge, so columns 1 and 3 line up.
+Above the icon, in the top 16 px like the clock over the page tile (§3.6), the **pack voltage** from the display's battery sense in whole volts (`54`, small 3×5 font). Nothing is drawn there without a plausible reading. The icon starts at the tile's top edge, so columns 1 and 3 line up. The % under the icon is in the clock's W95FA (9 px); `100` is wider than the column and shifts left to stay on screen.
 
 The **battery icon also shows the riding mode**, so no separate mode badge is needed:
 

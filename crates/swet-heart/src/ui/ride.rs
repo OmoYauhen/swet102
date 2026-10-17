@@ -554,30 +554,34 @@ fn odo_view(f: &mut Frame, dy: i32, m: &Model) {
     );
 }
 
-/// Battery icon (fill = SoC) with the percentage under it, and the measured
-/// pack voltage above it in whole volts, level with the clock (PRODUCT §3.6).
+/// Battery icon (fill = SoC) with the percentage under it in the clock's
+/// W95FA, and the measured pack voltage above it in whole volts (3×5).
 /// The icon starts where the page tile does, leaving the top 16 px to the volts.
 fn render_battery(f: &mut Frame, m: &Model) {
     if let Some(mv) = m.pack_mv {
         let mut d = [0u8; 10];
         let s = num::u32_dec((mv + 500) / 1000, &mut d);
-        let tw = W95_CLOCK.width(s, 1);
-        let ty = (TILE.1 - i32::from(W95_CLOCK.height)) / 2;
-        f.text(&W95_CLOCK, s, BAT_X + (12 - tw) / 2 + 1, ty, 1, Mode::Set);
+        let tw = s.len() as i32 * 4 - 1;
+        f.text3x5(BAT_X + (12 - tw) / 2 + 1, (TILE.1 - 5) / 2, s, 1, Mode::Set);
     }
     let (x, y, w, h) = (BAT_X + 1, TILE.1 + 2, 10, 30);
     f.fill_rect(x + 3, y - 2, 4, 2, Mode::Set); // terminal
     f.rect(x, y, w, h, Mode::Set);
+    // the 16 px under the icon, mirroring the volts' row above it
+    let row = y + h;
     if let Some(soc) = m.soc {
         let inner = h - 4;
         let fill = inner * i32::from(soc.min(100)) / 100;
         f.fill_rect(x + 2, y + 2 + inner - fill, w - 4, fill, Mode::Set);
         let mut d = [0u8; 10];
         let s = num::u32_dec(u32::from(soc.min(100)), &mut d);
-        let tw = s.len() as i32 * 4 - 1;
-        f.text3x5(BAT_X + (12 - tw) / 2 + 1, 56, s, 1, Mode::Set);
+        let tw = W95_CLOCK.width(s, 1);
+        // `100` (15 px) is wider than the column: keep it on screen
+        let tx = (BAT_X + (12 - tw) / 2 + 1).min(128 - tw);
+        let ty = row + (64 - row - i32::from(W95_CLOCK.height)) / 2;
+        f.text(&W95_CLOCK, s, tx, ty, 1, Mode::Set);
     } else {
-        f.text3x5(BAT_X + 3, 56, b"--", 1, Mode::Set);
+        f.text3x5(BAT_X + 3, row + (64 - row - 5) / 2, b"--", 1, Mode::Set);
     }
     if m.sport {
         bolt(f, x + 2, y + 6);
