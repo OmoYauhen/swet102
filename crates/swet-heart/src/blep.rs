@@ -2,7 +2,7 @@
 //! stack and the GATT table; this module decides what goes into the
 //! characteristics and when.
 //!
-//! - **Telemetry**: 14 bytes, once a second while a phone is connected.
+//! - **Telemetry**: 16 bytes, once a second while a phone is connected.
 //! - **Trips**: four 18-byte records (trip, battery trip, ride, odometer),
 //!   one per tick every 5 s while connected, and the affected one straight
 //!   after a reset.
@@ -17,8 +17,8 @@
 use crate::hal::{BleChannel, BleState, Hal};
 use crate::rides::Trip;
 
-pub const TELEMETRY_VERSION: u8 = 2;
-pub const TELEMETRY_LEN: usize = 14;
+pub const TELEMETRY_VERSION: u8 = 3;
+pub const TELEMETRY_LEN: usize = 16;
 pub const TRIPS_VERSION: u8 = 1;
 pub const TRIP_LEN: usize = 18;
 
@@ -99,6 +99,8 @@ pub struct Telemetry {
     pub power_w: u16,
     /// `SOC_UNKNOWN` until the first reading.
     pub soc: u8,
+    /// Measured pack voltage, mV; 0 = not measured.
+    pub pack_mv: u32,
     pub pas: u8,
     pub speed_limit: u8,
     pub lights: bool,
@@ -120,6 +122,7 @@ pub fn encode_telemetry(t: &Telemetry) -> [u8; TELEMETRY_LEN] {
     b[8] = u8::from(t.lights) | u8::from(t.walk) << 1 | u8::from(t.link_up) << 2;
     b[9] = t.error;
     b[10..14].copy_from_slice(&(t.odo_m / 100).to_le_bytes());
+    b[14..16].copy_from_slice(&((t.pack_mv / 10) as u16).to_le_bytes());
     b
 }
 
@@ -254,6 +257,7 @@ mod tests {
             speed_x10: 0x0123,
             power_w: 0x0456,
             soc: 78,
+            pack_mv: 54_327,
             pas: 3,
             speed_limit: 25,
             lights: true,
@@ -265,7 +269,7 @@ mod tests {
         assert_eq!(
             encode_telemetry(&t),
             [
-                2, 0x23, 0x01, 0x56, 0x04, 78, 3, 25, 0b101, 0, 0xD2, 0x04, 0, 0
+                3, 0x23, 0x01, 0x56, 0x04, 78, 3, 25, 0b101, 0, 0xD2, 0x04, 0, 0, 0x38, 0x15
             ]
         );
     }

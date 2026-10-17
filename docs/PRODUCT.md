@@ -67,7 +67,7 @@ All of these live in one config header. Changing one means rebuilding the firmwa
 |---|---|
 | Motor / protocol | BBSHD, stock Bafang UART |
 | Wheel circumference | 2165 mm |
-| Nominal pack voltage (for watts) | 52 V |
+| Nominal pack voltage (for watts until the battery sense has a reading) | 52 V |
 | City speed limit | 25 km/h |
 | Sport speed limit | protocol max (99) |
 | City PIN / Sport PIN | 4 digits each, passed at build time via Nix build arg / env (`SWET_PIN_CITY`, `SWET_PIN_SPORT`); never stored in the repo. The build fails if they're unset. |
@@ -131,7 +131,7 @@ or a dithered pattern. The exact look gets settled in the emulator.
 **M double-click** cycles the info pane in a ring:
 
 1. **Speed** (default): **04B_30 digits, 34 px** (reused from Swang Stodva, generated with `tools/ttf2font.py`), km/h. Start with this font and judge it in the emulator; a bigger font can come later.
-2. **Power**: watts = motor current × 52 V (an estimate, since stock firmware doesn't report live voltage)
+2. **Power**: watts = motor current × the pack voltage measured by the display's battery sense (shown top right, e.g. `54.3V`). Stock firmware doesn't report voltage; without a plausible reading (30–65 V) the watts use the nominal 52 V and no volts are shown
 3. **Trip**: manual trip, since the last reset in the menu
 4. **Battery trip**: since the last charge (auto-reset, see below)
 5. **Ride**: since this power-on (RAM only, starts at 0 on every boot)
@@ -329,7 +329,7 @@ normally (assist and speed limit don't change; the lights follow their mode).
 | 1 | **Lights** | light bulb | Choice screen: **OFF / ON / AUTO** (§3.5). The label shows the mode in use (`Lights: AUTO`); the screen also shows the phone's time and when AUTO switches. | — (M sets, PWR cancels) |
 | 2 | **Reset trip** | circular arrow | Zeroes the manual trip counter. Battery trip and ride counters reset themselves. | **Yes**: "Reset trip?" M = yes, PWR = cancel. After a reset, a short "done" toast returns to the item. |
 | 3 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
-| 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count, and the battery sense ADC (raw counts and volts through the nominal divider, unconfirmed on hardware). | — |
+| 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count, and the battery sense ADC (raw counts and volts through the 300k/16k divider, unfiltered). | — |
 | 5 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
 | 6 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
 
@@ -433,7 +433,7 @@ From `src/eeprom_internal.h` (layout `0x47`):
 | `ui8_street_mode_speed_limit` | **Replaced** by `speed_limit`, set by which PIN unlocked the bike |
 | `ui8_motor_power_option` | Drop: constant (BBSHD 1000 W) where a power scale is needed |
 | `ui8_ble_broadcast_enabled` | Drop: telemetry always on when a phone is connected |
-| `ui8_battery_voltage_option` | Drop: fixed 52 V |
+| `ui8_battery_voltage_option` | Drop: measured by the battery sense, 52 V fallback |
 | `ui8_motor_firmware` | Drop: always stock |
 
 Net result: 3 of 15 fields carry over, and the speed limit comes back in a new role. Swet102 adds `locked`, two trip counters and their max/avg stats.

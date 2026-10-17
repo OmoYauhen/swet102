@@ -168,6 +168,9 @@ fn main() {
                 };
             }
         }
+        // battery sense follows the motor's SoC: 42 V empty to 58.8 V full
+        let soc = sim.hal().motor.soc;
+        sim.hal_mut().vbat_adc = vbat_adc(42_000 + 168 * u32::from(soc));
         if once(Key::C) {
             if sim.hal().ble.0 == 0 {
                 sim.phone_connect();
@@ -317,7 +320,13 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         &format!("{}.{} A", m.current_x2 / 2, (m.current_x2 % 2) * 5),
     );
     keys(c, y, &[("R", &[Key::R]), ("F", &[Key::F])]);
-    row(c, &mut y, "Battery", &format!("{} %", m.soc));
+    let mv = swet_heart::vbat::mv(sim.hal().vbat_adc);
+    row(
+        c,
+        &mut y,
+        "Battery",
+        &format!("{} %  {}.{} V", m.soc, mv / 1000, mv % 1000 / 100),
+    );
     keys(c, y, &[("B", &[Key::B]), ("X", &[Key::X])]);
     let status = match m.status {
         codec::STATUS_NORMAL => "01 normal".to_string(),
@@ -641,4 +650,10 @@ fn tap(sim: &mut Sim, rec: &mut record::Recorder, b: u8, after_ms: u32) {
     run(sim, rec, 80);
     sim.release(b);
     run(sim, rec, after_ms);
+}
+
+/// Raw battery-sense counts for a pack voltage (inverse of `vbat::mv`).
+fn vbat_adc(mv: u32) -> u32 {
+    let (top, bottom) = swet_heart::config::VBAT_DIVIDER_K;
+    mv * 1024 * bottom / (3600 * (top + bottom))
 }

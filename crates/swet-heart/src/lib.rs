@@ -13,6 +13,7 @@ pub mod motor;
 pub mod rides;
 pub mod store;
 pub mod ui;
+pub mod vbat;
 
 pub use gfx::Frame;
 pub use hal::{BleChannel, BleState, Buttons, Diag, Hal, STORE_LEN};
@@ -292,6 +293,7 @@ impl<H: Hal> App<H> {
             speed_x10: m.speed_x10.unwrap_or(0),
             power_w: m.power_w.unwrap_or(0),
             soc: m.soc.unwrap_or(blep::SOC_UNKNOWN),
+            pack_mv: m.pack_mv.unwrap_or(0),
             pas: self.state.pas,
             speed_limit: self.state.speed_limit,
             lights: self.state.lights,
@@ -650,12 +652,14 @@ impl<H: Hal> App<H> {
 
     fn model(&self) -> Model {
         let v = &self.motor.values;
+        let pack_mv = vbat::pack_mv(self.hal.diag(Diag::VbatAdc));
         Model {
             link_up: self.motor.link_up(),
             speed_x10: v.rpm.map(codec::rpm_to_kph_x10),
             power_w: v
                 .current_x2
-                .map(|c| (u32::from(c) * config::PACK_V / 2) as u16),
+                .map(|c| (u32::from(c) * vbat::volts_mv(pack_mv) / 2000) as u16),
+            pack_mv,
             soc: v.soc,
             pas: self.state.pas,
             walk: self.state.walk,

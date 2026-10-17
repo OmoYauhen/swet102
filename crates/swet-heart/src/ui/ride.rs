@@ -481,12 +481,25 @@ fn render_pane(f: &mut Frame, view: View, m: &Model, dy: i32) {
         View::Power => {
             big_value(f, dy, m.power_w.map(u32::from), b"W");
             f.text3x5(PANE_X, dy + 1, b"POWER", 1, Mode::Set);
+            pack_volts(f, dy, m.pack_mv);
         }
         View::Trip => trip_view(f, dy, b"TRIP", &m.trip),
         View::BattTrip => trip_view(f, dy, b"BAT", &m.batt),
         View::Ride => trip_view(f, dy, b"RIDE", &m.ride),
         View::Odo => odo_view(f, dy, m),
     }
+}
+
+/// Measured pack voltage, top right of the Power view (`54.3V`); nothing
+/// without a reading (the watts then use the nominal 52 V).
+fn pack_volts(f: &mut Frame, dy: i32, pack_mv: Option<u32>) {
+    let Some(mv) = pack_mv else { return };
+    let mut d = [0u8; 12];
+    let s = num::u32_dec1((mv + 50) / 100, &mut d);
+    // 4 px per glyph, the last one's gap hangs past the pane
+    let mut x = PANE_X + PANE_W - (s.len() as i32 + 1) * 4 + 1;
+    x = f.text3x5(x, dy + 1, s, 1, Mode::Set);
+    f.text3x5(x, dy + 1, b"V", 1, Mode::Set);
 }
 
 /// Distance large with "km", centred in the pane. Below 1000 km with one
