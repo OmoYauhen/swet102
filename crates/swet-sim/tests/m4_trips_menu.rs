@@ -226,3 +226,15 @@ fn a_motor_error_beats_the_battery_trip_message() {
         "…the message is still there"
     );
 }
+
+#[test]
+fn diagnostics_shows_the_battery_sense_adc() {
+    let mut s = ride(0, 0, 1);
+    // 830 counts = 2.92 V on the pin, 57.6 V through the nominal 300k/16k
+    s.hal_mut().vbat_adc = 830;
+    open_menu_at(&mut s, Item::Diagnostics);
+    s.click(Buttons::M);
+    assert_eq!(s.app().screen(), Screen::Diag);
+    s.run_ms(100);
+    s.assert_screen("diag_vbat");
+}

@@ -93,6 +93,26 @@ void hal_power_off(void)
     }
 }
 
+/* Battery sense, raw 10-bit counts: 1/3 prescaling against the 1.2 V band
+ * gap, so 1023 = 3.6 V on the pin. One conversion takes ~68 µs; it runs in
+ * the background between polls, so nothing ever waits for it. */
+void hal_vbat_poll(void)
+{
+    if (NRF_ADC->ENABLE == 0) {
+        NRF_ADC->CONFIG = (ADC_CONFIG_RES_10bit << ADC_CONFIG_RES_Pos) |
+                          (ADC_CONFIG_INPSEL_AnalogInputOneThirdPrescaling << ADC_CONFIG_INPSEL_Pos) |
+                          (ADC_CONFIG_REFSEL_VBG << ADC_CONFIG_REFSEL_Pos) |
+                          (VBAT_AIN << ADC_CONFIG_PSEL_Pos);
+        NRF_ADC->ENABLE = 1;
+    } else if (NRF_ADC->EVENTS_END) {
+        NRF_ADC->EVENTS_END = 0;
+        g_diag.vbat_adc = NRF_ADC->RESULT;
+    } else if (NRF_ADC->BUSY) {
+        return;
+    }
+    NRF_ADC->TASKS_START = 1;
+}
+
 uint32_t hal_diag(uint8_t id)
 {
     switch (id) {
@@ -107,6 +127,7 @@ uint32_t hal_diag(uint8_t id)
     case 8: return g_diag.flush_max_us;
     case 9: return g_diag.store_errors;
     case 10: return g_diag.ble_dropped;
+    case 11: return g_diag.vbat_adc;
     default: return 0;
     }
 }
