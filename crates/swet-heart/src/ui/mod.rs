@@ -79,7 +79,10 @@ impl Stack {
 pub struct Model {
     pub link_up: bool,
     pub speed_x10: Option<u16>,
+    /// Motor current × the pack voltage (measured, else nominal).
     pub power_w: Option<u16>,
+    /// Measured pack voltage; `None` without a plausible battery-sense reading.
+    pub pack_mv: Option<u32>,
     pub soc: Option<u8>,
     pub pas: u8,
     pub walk: bool,

@@ -6,6 +6,7 @@ use crate::config;
 use crate::gfx::{Frame, Mode, num};
 use crate::hal::Buttons;
 use crate::motor::{MotorDiag, MotorValues};
+use crate::vbat;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct DiagData {
@@ -160,15 +161,15 @@ pub fn render(f: &mut Frame, d: &DiagData) {
     );
 }
 
-/// Battery sense, top right: raw counts and the voltage through the nominal
-/// divider, `VB 812 56.3V`. The volts are only as good as the divider.
+/// Battery sense, top right: raw counts and the voltage through the divider,
+/// `VB 812 56.3V` (unfiltered, so a floating pin shows up here).
 fn render_vbat(f: &mut Frame, raw: u32) {
     let (mut r, mut v) = ([0u8; 10], [0u8; 12]);
     let parts: [&[u8]; 5] = [
         b"VB ",
         num::u32_dec(raw, &mut r),
         b" ",
-        num::u32_dec1(vbat_mv(raw) / 100, &mut v),
+        num::u32_dec1(vbat::mv(raw) / 100, &mut v),
         b"V",
     ];
     let chars: usize = parts.iter().map(|p| p.len()).sum();
@@ -176,25 +177,5 @@ fn render_vbat(f: &mut Frame, raw: u32) {
     let mut x = 126 - chars as i32 * 4;
     for p in parts {
         x = f.text3x5(x, 3, p, 1, Mode::Set);
-    }
-}
-
-/// Battery millivolts from raw counts: 1024 counts = 3.6 V on the pin, times
-/// the divider ratio.
-pub fn vbat_mv(raw: u32) -> u32 {
-    let (top, bottom) = config::VBAT_DIVIDER_K;
-    raw * 3600 * (top + bottom) / (1024 * bottom)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::vbat_mv;
-
-    #[test]
-    fn vbat_through_the_nominal_divider() {
-        assert_eq!(vbat_mv(0), 0);
-        // full 14S pack, 58.8 V: 2.98 V on the pin
-        assert_eq!(vbat_mv(847) / 100, 588);
-        assert_eq!(vbat_mv(1023), 71_030);
     }
 }

@@ -12,9 +12,11 @@ use crate::rides::Trip;
 const TILE: (i32, i32, i32, i32) = (0, 16, 26, 48);
 /// Column 2.
 const PANE_X: i32 = 28;
-const PANE_W: i32 = 86;
+const PANE_W: i32 = 83;
 /// Column 3.
-const BAT_X: i32 = 116;
+const BAT_X: i32 = 113;
+/// Column 3 runs to the screen edge: `54.9` and `100` are 15 px.
+const BAT_W: i32 = 15;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -554,24 +556,37 @@ fn odo_view(f: &mut Frame, dy: i32, m: &Model) {
     );
 }
 
-/// Battery icon (fill = SoC) with the percentage under it.
+/// Battery icon (fill = SoC) with the percentage under it in the clock's
+/// W95FA, and the measured pack voltage above it (`54.9`, 3×5). The icon
+/// starts where the page tile does, leaving the top 16 px to the volts.
 fn render_battery(f: &mut Frame, m: &Model) {
-    let (x, y, w, h) = (BAT_X + 1, 4, 10, 44);
-    f.fill_rect(x + 3, y - 2, 4, 2, Mode::Set); // terminal
+    // centred in the column; odd leftovers go right, where the screen ends
+    let centre = |tw: i32| BAT_X + (BAT_W - tw + 1) / 2;
+    if let Some(mv) = m.pack_mv {
+        let mut d = [0u8; 12];
+        let s = num::u32_dec1((mv + 50) / 100, &mut d);
+        let tw = s.len() as i32 * 4 - 1;
+        f.text3x5(centre(tw), (TILE.1 - 5) / 2, s, 1, Mode::Set);
+    }
+    let (x, y, w, h) = (BAT_X + 1, TILE.1 + 2, BAT_W - 2, 30);
+    f.fill_rect(x + (w - 5) / 2, y - 2, 5, 2, Mode::Set); // terminal
     f.rect(x, y, w, h, Mode::Set);
+    // the 16 px under the icon, mirroring the volts' row above it
+    let row = y + h;
     if let Some(soc) = m.soc {
         let inner = h - 4;
         let fill = inner * i32::from(soc.min(100)) / 100;
         f.fill_rect(x + 2, y + 2 + inner - fill, w - 4, fill, Mode::Set);
         let mut d = [0u8; 10];
         let s = num::u32_dec(u32::from(soc.min(100)), &mut d);
-        let tw = s.len() as i32 * 4 - 1;
-        f.text3x5(BAT_X + (12 - tw) / 2 + 1, 56, s, 1, Mode::Set);
+        let tw = W95_CLOCK.width(s, 1);
+        let ty = row + (64 - row - i32::from(W95_CLOCK.height)) / 2;
+        f.text(&W95_CLOCK, s, centre(tw), ty, 1, Mode::Set);
     } else {
-        f.text3x5(BAT_X + 3, 56, b"--", 1, Mode::Set);
+        f.text3x5(centre(7), row + (64 - row - 5) / 2, b"--", 1, Mode::Set);
     }
     if m.sport {
-        bolt(f, x + 2, y + 6);
+        bolt(f, x + (w - 6) / 2, y + 6);
     }
 }
 

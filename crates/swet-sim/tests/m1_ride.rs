@@ -193,3 +193,18 @@ fn motor_bus_keeps_one_request_per_100_ms_slot() {
     );
     assert_eq!(after.bad_checksums, 0);
 }
+
+#[test]
+fn power_uses_the_measured_pack_voltage() {
+    let mut s = riding(20);
+    // 780 counts = 54.2 V through the 300k/16k divider
+    s.hal_mut().vbat_adc = 780;
+    // `100` is the widest battery %: it must stay on screen
+    s.motor().soc = 100;
+    s.run_ms(1000);
+    s.double_click(Buttons::M);
+    s.run_ms(400);
+    assert_eq!(s.app().view(), View::Power);
+    // 12 A × 54.16 V, not × 52 V
+    s.assert_screen("m1_power_measured");
+}

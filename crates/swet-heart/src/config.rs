@@ -18,11 +18,15 @@ pub const HOLD_MS: u32 = 1000;
 // --- bike ---
 /// Wheel circumference.
 pub const WHEEL_MM: u32 = 2165;
-/// Nominal pack voltage for watts = amps × volts (stock firmware reports no voltage).
+/// Nominal pack voltage: watts = amps × volts until the battery sense has a
+/// plausible reading (the stock controller reports no voltage).
 pub const PACK_V: u32 = 52;
-/// Battery sense divider (top, bottom) in kΩ: 300k/16k as reported for the
-/// SW102, uncalibrated (TECH_DESIGN §16). Shown on Diagnostics only.
+/// Battery sense divider (top, bottom) in kΩ: 300k/16k, confirmed against a
+/// multimeter on PET (TECH_DESIGN §16 #11).
 pub const VBAT_DIVIDER_K: (u32, u32) = (300, 16);
+/// Readings outside this range aren't a 14S pack (42–58.8 V, with margin for
+/// sag and ADC error): no sample yet, a floating pin or a bench supply.
+pub const VBAT_VALID_MV: core::ops::RangeInclusive<u32> = 30_000..=65_000;
 pub const PAS_MAX: u8 = 9;
 /// City limit; the sport PIN stores `SPORT_LIMIT_KMH` (PRODUCT §6).
 pub const CITY_LIMIT_KMH: u8 = 25;
