@@ -141,7 +141,9 @@ compares it with the zip's. After the update the bootloader keeps advertising
 `SW102_DFU` until you **power off and start the display with a long PWR press**.
 
 **PINs** are built into the firmware from `SWET_PIN_CITY` and `SWET_PIN_SPORT`
-(4 digits each, different). They are never stored in the repo. Without them
+(4 digits each, different). They are never stored in the repo: put them in an
+untracked `pins.env` (`SWET_PIN_CITY ?= xxxx`, `SWET_PIN_SPORT ?= yyyy`) and
+`make release` picks them up; the environment or the command line still win. Without them
 (tests, emulator, CI) the public dev PINs **1111 / 2222** are used and the version
 shows `-dev`; `make dfu` refuses that unless you add `DEV_PINS=1` for a bench build.
 

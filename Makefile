@@ -21,6 +21,11 @@ SREC_CAT ?= srec_cat
 
 include version.mk
 
+# Real PINs, untracked: `SWET_PIN_CITY ?= xxxx` / `SWET_PIN_SPORT ?= yyyy`.
+# `?=` keeps a one-off `SWET_PIN_CITY=… make release` in charge; no file = dev PINs.
+-include pins.env
+export SWET_PIN_CITY SWET_PIN_SPORT
+
 BUILD     := build
 OUT       := $(BUILD)/swet102
 RUST_LIB  := target/thumbv6m-none-eabi/release/libswet_fw.a
