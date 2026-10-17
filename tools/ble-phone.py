@@ -5,7 +5,6 @@ display, subscribe to everything and print what it sends.
 
     tools/ble-phone.py                 scan for "swet102", connect, print
     tools/ble-phone.py --address XX:.. connect to a known address
-    tools/ble-phone.py --dfu           also write "DFU!" to the control characteristic
     tools/ble-phone.py --time 19:05 06:40
                                        also send the PC's local time with that
                                        sunset and sunrise (lights AUTO)
@@ -24,6 +23,7 @@ from bleak import BleakClient, BleakScanner
 BASE = "8f03{:04x}-da4c-453d-a163-41a592a0e9fd"
 TELEMETRY, COMMAND, CONTROL, TRIPS = (BASE.format(n) for n in (2, 3, 4, 5))
 FW_REV = "00002a26-0000-1000-8000-00805f9b34fb"
+SW_REV = "00002a28-0000-1000-8000-00805f9b34fb"  # build number (VERSION_NUM)
 
 COMMANDS = {
     0x01: "volume +",
@@ -87,7 +87,6 @@ def time_sync(sunset_min: int, sunrise_min: int) -> bytes:
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--address", help="display address (skip the scan)")
-    ap.add_argument("--dfu", action="store_true", help='write "DFU!" (wheel must be stopped 5 s)')
     ap.add_argument("--time", nargs=2, type=hhmm, metavar=("SUNSET", "SUNRISE"),
                     help="send the local time with today's sunset and sunrise (HH:MM)")
     args = ap.parse_args()
@@ -102,16 +101,14 @@ async def main() -> None:
     print(f"connecting to {target}")
     async with BleakClient(target) as c:
         rev = await c.read_gatt_char(FW_REV)
-        print(f"connected; firmware {rev.decode(errors='replace')}")
+        build = await c.read_gatt_char(SW_REV)
+        print(f"connected; firmware {rev.decode(errors='replace')}, build {build.decode(errors='replace')}")
         await c.start_notify(TELEMETRY, telemetry)
         await c.start_notify(TRIPS, trips)
         await c.start_notify(COMMAND, command)
         if args.time:
             await c.write_gatt_char(CONTROL, time_sync(*args.time), response=True)
             print(f"sent the time ({time.strftime('%H:%M:%S')}); the first sync sets lights to AUTO")
-        if args.dfu:
-            await c.write_gatt_char(CONTROL, b"DFU!", response=True)
-            print('wrote "DFU!": the display should reboot into SW102_DFU')
         while c.is_connected:
             await asyncio.sleep(1)
         print("disconnected")

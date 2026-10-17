@@ -126,7 +126,7 @@ fn menu_wraps_and_pwr_backs_out() {
     s.click(Buttons::LEFT);
     assert_eq!(s.app().menu_item(), Item::Thanks);
     s.click(Buttons::LEFT);
-    assert_eq!(s.app().menu_item(), Item::Dfu);
+    assert_eq!(s.app().menu_item(), Item::Firmware);
     s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
     s.click(Buttons::RIGHT);
@@ -161,24 +161,6 @@ fn detail_screens_open_and_return_to_the_menu() {
         s.click(Buttons::PWR);
         assert_eq!(s.app().screen(), Screen::Ride);
     }
-}
-
-#[test]
-fn update_waits_for_pwr_then_saves_and_reboots_while_it_is_held() {
-    let mut s = ride(0, 0, 1);
-    s.click(Buttons::RIGHT); // an unsaved PAS change
-    open_menu_at(&mut s, Item::Dfu);
-    s.click(Buttons::M);
-    assert_eq!(s.app().screen(), Screen::Update);
-    s.click(Buttons::LEFT); // any other button goes back
-    assert_eq!(s.app().screen(), Screen::Menu);
-    s.click(Buttons::M);
-    s.run_ms(2000);
-    assert!(!s.hal().dfu_requested, "nothing happens until PWR");
-    s.press(Buttons::PWR); // and keep holding it
-    s.run_ms(200);
-    assert!(s.hal().dfu_requested);
-    assert_eq!(stored(&s).pas, 1, "saved before rebooting");
 }
 
 /// Feed one SoC value long enough to count as stable (3 readings, 600 ms apart).

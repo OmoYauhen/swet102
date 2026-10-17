@@ -117,7 +117,7 @@ fn main() {
     let mut commands_seen = 0u32;
     let mut night = false;
 
-    while window.is_open() && !sim.hal().powered_off && !sim.hal().dfu_requested {
+    while window.is_open() && !sim.hal().powered_off {
         let mut buttons = 0;
         for (keys, b, _) in DISPLAY_KEYS {
             if keys.iter().any(|k| window.is_key_down(*k)) {
@@ -174,9 +174,6 @@ fn main() {
             } else {
                 sim.phone_disconnect();
             }
-        }
-        if once(Key::U) && sim.hal().ble.0 != 0 {
-            sim.phone_write_control(swet_heart::blep::CONTROL_DFU);
         }
         if once(Key::T) && sim.hal().ble.0 != 0 {
             // the phone's time, alternating day / night (sunset 19:00, sunrise 07:00)
@@ -251,9 +248,6 @@ fn main() {
     }
     if let Some(r) = gif {
         report_gif(r);
-    }
-    if sim.hal().dfu_requested {
-        eprintln!("swet-emu: the firmware rebooted into DFU mode (menu → Update)");
     }
 }
 
@@ -433,7 +427,6 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         Power::On => "on",
         Power::Locking { .. } => "locking",
         Power::Off { .. } => "powering off",
-        Power::Dfu { .. } => "rebooting to DFU",
     };
     row(c, &mut y, "Power", power);
     let phone = if sim.hal().ble.0 == 0 {
@@ -464,7 +457,7 @@ fn draw(c: &mut Canvas, sim: &Sim, kmh: u32, held: &dyn Fn(&[Key]) -> bool) {
         "F12: PNG of the display   F11: GIF start / stop   --fresh: empty flash",
         "Dev-build PINs: city 1111, sport 2222",
         "Motor: B brake, X error 21, L link, W/S speed, E/D current, R/F battery",
-        "Phone: C connect / disconnect (subscribed to everything), U sends DFU!,",
+        "Phone: C connect / disconnect (subscribed to everything),",
         "  T sends the time (alternately 12:00 and 21:00; sunset 19:00)",
     ]
     .iter()

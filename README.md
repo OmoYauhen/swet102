@@ -10,7 +10,7 @@ e-bike: **PET** (Personal Electrical Transport). SW102 + PET = Swet102.
 Player and Gate pages, lights (OFF / ON / AUTO by the phone's clock), motor
 bus, error screens, saved settings, lock
 with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
-message, menu, BLE (telemetry, trips, phone commands, DFU from the phone), boot
+message, menu, BLE (telemetry, trips, phone commands, build number for OTA), boot
 animation, page, PAS and info-pane slides. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
 
 ![swet102 demo: boot, PAS, pages, info pane](docs/demo.gif)
@@ -60,7 +60,6 @@ state. Button and key chips light up while held.
 | X | motor error 21 on / off |
 | L | motor link on / off |
 | C | phone connected + subscribed / gone |
-| U | the phone writes `DFU!` (needs a phone, wheel stopped 5 s) |
 | T | the phone sends the time: 12:00 and 21:00 by turns, sunset 19:00, sunrise 07:00 (needs a phone) |
 | F11 | GIF of the display: start / stop (`swet102-NNN.gif`, real timing) |
 | F12 | PNG of the display |
@@ -109,17 +108,18 @@ The display advertises as `swet102` for as long as it's on (fast for 30 s after
 power-on or a disconnect, then once a second). Phones connect without pairing.
 The GATT service (`8f030001-da4c-453d-a163-41a592a0e9fd`) has telemetry (1 Hz),
 trips (every 5 s), commands (one notification per Player/Gate press) and a
-control characteristic: writing `DFU!` reboots into the bootloader once the
-wheel has stood still for 5 s, and a 9-byte time sync (`T`, local time,
-today's sunset and sunrise) gives the display a clock for the lights. The app
+control characteristic: a 9-byte time sync (`T`, local time, today's sunset
+and sunrise) gives the display a clock for the lights. The app
 sends it on connect and every 10 minutes; the first one after power-on turns
 the lights to AUTO (on from 20 minutes before sunset until sunrise) unless
-you've already picked a mode in the menu. Byte layouts: TECH_DESIGN §9.4–9.5.
+you've already picked a mode in the menu. Device Information has the version
+(firmware revision) and the build number `VERSION_NUM` (software revision),
+which the app compares with an update zip. Byte layouts: TECH_DESIGN §9.4–9.5.
 
 There's no phone app yet. `tools/ble-phone.py` stands in for it from a PC with
 Bluetooth: it connects, subscribes to everything and prints what the display
-sends (`--dfu` also writes `DFU!`; `--time 19:05 06:40` sends the PC's clock
-with that sunset and sunrise).
+sends (`--time 19:05 06:40` also sends the PC's clock with that sunset and
+sunrise).
 
 ## Flashing
 
@@ -128,12 +128,17 @@ The display keeps casainho's bootloader and S130. Firmware updates need a
 downgrades); `version.mk` makes it date-based.
 
 ```sh
-SWET_PIN_CITY=xxxx SWET_PIN_SPORT=yyyy make release   # check + build/swet102-<VERSION_NUM>.zip → nRF Toolbox → DFU
+SWET_PIN_CITY=xxxx SWET_PIN_SPORT=yyyy make release   # check + build/swet102-<VERSION_NUM>.zip
 make flash-app  # over SWD (WCH-LinkE in DAP mode), keeps bootloader + S130
 ```
 
-After an OTA update the bootloader keeps advertising `SW102_DFU` until you
-**power off and start the display with a long PWR press**.
+**OTA update:** the firmware has no way into the bootloader; you enter it by
+hand. With the display off, hold **M + PWR for about 8 s** until the bootloader
+advertises `SW102_DFU`, then update from the **OTA tab** of
+[swet102-app](https://github.com/OmoYauhen/swet102-app) (or nRF Toolbox → DFU)
+with the zip. The app reads the installed build number over BLE first and
+compares it with the zip's. After the update the bootloader keeps advertising
+`SW102_DFU` until you **power off and start the display with a long PWR press**.
 
 **PINs** are built into the firmware from `SWET_PIN_CITY` and `SWET_PIN_SPORT`
 (4 digits each, different). They are never stored in the repo. Without them
@@ -151,8 +156,8 @@ The hardware checks from TECH_DESIGN §16 that the emulator can't answer:
   (if it's ~32, flip `SPEED_LIMIT_AS_RPM` in `config.rs`).
 - [ ] **Walk assist:** hold it for 30 s; if the motor stops after a while, set
   `WALK_KEEPALIVE_MS`.
-- [ ] **Menu → Update**, then hold PWR 5 s, brings up `SW102_DFU` (and `tools/ble-phone.py --dfu`
-  opens the same Update screen).
+- [ ] **OTA:** display off, hold M + PWR 8 s, `SW102_DFU` appears; the
+  swet102-app OTA tab shows the installed build number and updates from the zip.
 - [ ] **BLE:** the display boots with the GATT service, the app (or
   `tools/ble-phone.py`) gets telemetry, Player and Gate presses arrive.
 - [ ] **Menu → Lights → ON** switches the motor light and dims the screen; with
@@ -172,7 +177,6 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Bluetooth | phone connected?, commands on?, the display's BLE address, commands sent / notifications dropped |
 | Diagnostics | the screen below |
 | Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
-| Update (DFU) | asks you to press and **hold PWR for 5 s**: on the press it saves and restarts, and the held button keeps the display powered until the bootloader is in DFU mode (`SW102_DFU`) |
 | ♥ Special thanks | the last item: the people who helped, one name at a time, as written (`@entropia_pl`, `@yahor_k`, `@veganbunt`). LEFT / RIGHT step through them (it wraps); each name slides in like the boot text. PWR goes back |
 
 **Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up

@@ -16,19 +16,17 @@ pub enum Item {
     Ble,
     Diagnostics,
     Firmware,
-    Dfu,
     Thanks,
 }
 
 impl Item {
     /// Ring order (PRODUCT §5).
-    pub const ALL: [Item; 7] = [
+    pub const ALL: [Item; 6] = [
         Item::Lights,
         Item::ResetTrip,
         Item::Ble,
         Item::Diagnostics,
         Item::Firmware,
-        Item::Dfu,
         Item::Thanks,
     ];
 
@@ -39,7 +37,6 @@ impl Item {
             Item::Ble => b"Bluetooth",
             Item::Diagnostics => b"Diagnostics",
             Item::Firmware => b"Firmware",
-            Item::Dfu => b"Update (DFU)",
             Item::Thanks => b"Special thanks",
         }
     }
@@ -51,7 +48,6 @@ impl Item {
             Item::Ble => &ICON_BLE,
             Item::Diagnostics => &ICON_WRENCH,
             Item::Firmware => &ICON_INFO,
-            Item::Dfu => &ICON_DOWNLOAD,
             Item::Thanks => &ICON_HEART,
         }
     }
@@ -348,47 +344,6 @@ pub fn render_firmware(f: &mut Frame) {
     }
 }
 
-/// Update, step 1 (menu → Update, or `DFU!` from the phone): how to get into
-/// the bootloader's update mode. Its only way in that keeps the display
-/// powered is PWR held for 5 s from its start: the reset releases our power
-/// latch, and the held button keeps the board on until the bootloader sets
-/// it again (TECH_DESIGN §9.5).
-pub fn render_update_arm(f: &mut Frame) {
-    update_screen(
-        f,
-        &[
-            (b"PRESS AND HOLD PWR", 22),
-            (b"FOR 5 S TO START", 30),
-            (b"UPDATE MODE", 38),
-            (b"M: BACK", 54),
-        ],
-    );
-}
-
-/// Update, step 2: the last frame before the reset, so it is what the OLED
-/// keeps while PWR is held and the bootloader runs.
-pub fn render_update_hold(f: &mut Frame) {
-    update_screen(
-        f,
-        &[
-            (b"KEEP HOLDING PWR", 22),
-            (b"FOR 5 S, THEN:", 30),
-            (b"NRF TOOLBOX: DFU", 38),
-            (b"DEVICE SW102_DFU", 46),
-            (b"AFTER: OFF, THEN ON", 56),
-        ],
-    );
-}
-
-fn update_screen(f: &mut Frame, lines: &[(&[u8], i32)]) {
-    draw_icon(f, &ICON_DOWNLOAD, 3, 14);
-    const TX: i32 = 42;
-    f.text(&TEXT, b"Update", TX, 2, 1, Mode::Set);
-    for &(s, y) in lines {
-        f.text3x5(TX, y, s, 1, Mode::Set);
-    }
-}
-
 /// 16×16 icon as text art, drawn ×2.
 type Icon = [&'static [u8; 16]; 16];
 
@@ -533,25 +488,6 @@ const ICON_INFO: Icon = [
     b"................",
 ];
 
-const ICON_DOWNLOAD: Icon = [
-    b".......##.......",
-    b".......##.......",
-    b".......##.......",
-    b".......##.......",
-    b".......##.......",
-    b".......##.......",
-    b"...##..##..##...",
-    b"....##.##.##....",
-    b".....######.....",
-    b"......####......",
-    b".......##.......",
-    b"#..............#",
-    b"#..............#",
-    b"#..............#",
-    b"################",
-    b"................",
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,7 +498,7 @@ mod tests {
         m.prev();
         assert_eq!(m.item(), Item::Thanks, "last in the ring");
         m.prev();
-        assert_eq!(m.item(), Item::Dfu);
+        assert_eq!(m.item(), Item::Firmware);
         m.next();
         m.next();
         m.next();

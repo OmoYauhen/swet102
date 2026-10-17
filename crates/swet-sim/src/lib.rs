@@ -35,7 +35,6 @@ pub struct SimHal {
     /// What a read of each characteristic returns (telemetry, command, trips).
     pub ble_values: [Vec<u8>; 3],
     pub powered_off: bool,
-    pub dfu_requested: bool,
     /// Battery sense, raw ADC counts (`Diag::VbatAdc`).
     pub vbat_adc: u32,
 }
@@ -98,9 +97,6 @@ impl Hal for SimHal {
     fn power_off(&mut self) {
         self.powered_off = true;
         self.store_inflight = None; // cut mid-write: lost
-    }
-    fn reboot_to_dfu(&mut self) {
-        self.dfu_requested = true;
     }
     fn diag(&self, d: Diag) -> u32 {
         match d {

@@ -54,10 +54,6 @@ pub const CONTRAST_NIGHT: u8 = 0x30;
 /// AUTO turns the lights on this many minutes before sunset (off at sunrise).
 pub const LIGHTS_LEAD_MIN: u16 = 20;
 
-// --- BLE (TECH_DESIGN §9.5) ---
-/// "DFU!" from the phone is accepted only after the wheel has stood still this long.
-pub const DFU_STOPPED_MS: u32 = 5000;
-
 // --- motor bus (TECH_DESIGN §7) ---
 /// One request per slot.
 pub const MOTOR_SLOT_MS: u32 = 100;

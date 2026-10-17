@@ -212,7 +212,6 @@ mod tests {
             [0; 6]
         }
         fn power_off(&mut self) {}
-        fn reboot_to_dfu(&mut self) {}
         fn diag(&self, _: crate::Diag) -> u32 {
             0
         }

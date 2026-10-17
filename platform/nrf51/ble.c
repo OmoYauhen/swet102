@@ -162,13 +162,19 @@ static void services_init(void)
     char_add(svc, UUID_CONTROL, false, false, true, &m_control);
     char_add(svc, UUID_TRIPS, true, true, false, &m_chars[2]);
 
-    /* Device Information: firmware version from the Rust core's build info. */
+    /* Device Information, from the Rust core's build info: firmware revision
+     * = version string, software revision = build number (VERSION_NUM, the
+     * DFU application version), which the phone compares with an update zip. */
     static char fw_rev[24];
-    uint8_t n = swet_version((uint8_t *)fw_rev, sizeof fw_rev);
+    static char sw_rev[12];
+    uint8_t n  = swet_version((uint8_t *)fw_rev, sizeof fw_rev);
+    uint8_t sn = swet_build_num((uint8_t *)sw_rev, sizeof sw_rev);
     ble_dis_init_t dis;
     memset(&dis, 0, sizeof dis);
     dis.fw_rev_str.length         = n;
     dis.fw_rev_str.p_str          = (uint8_t *)fw_rev;
+    dis.sw_rev_str.length         = sn;
+    dis.sw_rev_str.p_str          = (uint8_t *)sw_rev;
     ble_srv_ascii_to_utf8(&dis.model_num_str, MODEL_NAME);
     ble_srv_ascii_to_utf8(&dis.manufact_name_str, MANUFACTURER_NAME);
     BLE_GAP_CONN_SEC_MODE_SET_OPEN(&dis.dis_attr_md.read_perm);

@@ -24,7 +24,6 @@ mod ffi {
         pub fn hal_ble_notify(ch: u8, buf: *const u8, len: u8);
         pub fn hal_ble_address(out: *mut u8);
         pub fn hal_power_off();
-        pub fn hal_reboot_to_dfu();
         pub fn hal_diag(id: u8) -> u32;
         pub fn hal_panic() -> !;
     }
@@ -75,9 +74,6 @@ impl Hal for FwHal {
     }
     fn power_off(&mut self) {
         unsafe { ffi::hal_power_off() }
-    }
-    fn reboot_to_dfu(&mut self) {
-        unsafe { ffi::hal_reboot_to_dfu() }
     }
     fn diag(&self, d: Diag) -> u32 {
         unsafe { ffi::hal_diag(d as u8) }
@@ -130,6 +126,21 @@ pub unsafe extern "C" fn swet_ble_control(data: *const u8, len: u8) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn swet_version(out: *mut u8, cap: u8) -> u8 {
     let v = swet_heart::config::VERSION.as_bytes();
+    let n = v.len().min(usize::from(cap));
+    let dst = unsafe { core::slice::from_raw_parts_mut(out, n) };
+    dst.copy_from_slice(&v[..n]);
+    n as u8
+}
+
+/// The build number (`VERSION_NUM`, YYMMDDHH, the DFU application version;
+/// "-" outside `make`) for the Device Information software revision, so the
+/// phone can compare it with an update zip. Pure, like `swet_version`.
+///
+/// # Safety
+/// `out` must point to `cap` writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swet_build_num(out: *mut u8, cap: u8) -> u8 {
+    let v = swet_heart::config::BUILD_NUM.as_bytes();
     let n = v.len().min(usize::from(cap));
     let dst = unsafe { core::slice::from_raw_parts_mut(out, n) };
     dst.copy_from_slice(&v[..n]);

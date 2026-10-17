@@ -22,7 +22,6 @@ uint8_t  hal_ble_state(void);
 void     hal_ble_notify(uint8_t ch, const uint8_t *buf, uint8_t len);
 void     hal_ble_address(uint8_t *out);             /* 6 bytes */
 void     hal_power_off(void);
-void     hal_reboot_to_dfu(void);
 uint32_t hal_diag(uint8_t id);                      /* swet_heart::Diag */
 void     hal_panic(void) __attribute__((noreturn));
 
@@ -33,3 +32,5 @@ void swet_ble_control(const uint8_t *data, uint8_t len);
 /* Copies the version string (no NUL) into out; returns its length. Pure: may
  * be called before swet_init(). */
 uint8_t swet_version(uint8_t *out, uint8_t cap);
+/* Same for the build number (VERSION_NUM, YYMMDDHH; "-" outside make). */
+uint8_t swet_build_num(uint8_t *out, uint8_t cap);

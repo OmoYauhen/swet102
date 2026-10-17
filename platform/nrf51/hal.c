@@ -83,7 +83,7 @@ int16_t hal_uart_read(void)
     return app_uart_get(&b) == NRF_SUCCESS ? b : -1;
 }
 
-/* hal_store_* live in store.c (FDS), hal_ble_* in ble.c, hal_reboot_to_dfu in dfu.c. */
+/* hal_store_* live in store.c (FDS), hal_ble_* in ble.c. */
 
 void hal_power_off(void)
 {
