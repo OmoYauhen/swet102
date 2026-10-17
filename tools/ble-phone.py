@@ -38,17 +38,20 @@ TRIP_NAMES = ["trip", "battery", "ride", "odometer"]
 
 
 def telemetry(_, data: bytearray) -> None:
-    if len(data) != 14 or data[0] != 2:
+    if len(data) != 16 or data[0] != 3:
         print(f"telemetry ?? {data.hex()}")
         return
-    _, speed, power, soc, pas, limit, flags, err, odo_hm = struct.unpack("<BHHBBBBBI", data)
+    _, speed, power, soc, pas, limit, flags, err, odo_hm, pack_cv = struct.unpack(
+        "<BHHBBBBBIH", data
+    )
     soc_s = "--" if soc == 0xFF else f"{soc}%"
+    volts = f" {pack_cv / 100:.1f} V" if pack_cv else ""
     err_s = "" if err == 0 else (" LINK LOST" if err == 0xFF else f" ERROR {err:02X}")
     lights = " lights" if flags & 1 else ""
     walk = " walk" if flags & 2 else ""
     link = "" if flags & 4 else " (no motor)"
     print(
-        f"tel  {speed / 10:5.1f} km/h {power:4d} W  bat {soc_s:>4}  PAS {pas}"
+        f"tel  {speed / 10:5.1f} km/h {power:4d} W  bat {soc_s:>4}{volts}  PAS {pas}"
         f"  limit {limit}  odo {odo_hm / 10:.1f} km{lights}{walk}{link}{err_s}"
     )
 

@@ -172,6 +172,7 @@ fn telemetry_once_a_second_while_connected() {
     assert_eq!(t[9], 0); // no error
     let odo_hm = u32_at(t, 10);
     assert_eq!(odo_hm, s.app().rides().odo_m / 100);
+    assert_eq!(u16_at(t, 14), 0, "no battery-sense reading");
 
     s.run_ms(3000);
     assert_eq!(s.notified(BleChannel::Telemetry).len(), 4);
@@ -277,4 +278,22 @@ fn ble_screen_shows_the_phone() {
     s.click(Buttons::M);
     assert_eq!(s.app().screen(), Screen::Ble);
     s.assert_screen("m5_ble_connected");
+}
+
+#[test]
+fn telemetry_carries_the_measured_pack_voltage() {
+    let mut s = riding(20);
+    // 780 counts = 54.16 V through the 300k/16k divider
+    s.hal_mut().vbat_adc = 780;
+    s.phone_connect();
+    s.tick();
+    let t = s.notified(BleChannel::Telemetry).pop().expect("telemetry");
+    assert_eq!(u16_at(&t, 14), 5415); // 10 mV units
+    assert_eq!(u16_at(&t, 3), 649); // 12 A × 54.16 V
+
+    // a floating pin (71 V) is no reading: nominal 52 V, voltage 0
+    s.hal_mut().vbat_adc = 1023;
+    s.run_ms(1000);
+    let t = s.notified(BleChannel::Telemetry).pop().expect("telemetry");
+    assert_eq!((u16_at(&t, 14), u16_at(&t, 3)), (0, 624));
 }

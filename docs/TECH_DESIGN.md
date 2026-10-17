@@ -690,19 +690,20 @@ Base UUID: `8f03xxxx-da4c-453d-a163-41a592a0e9fd`
 | Trips | `8f030005-…` | read, notify |
 | Device Information | 0x180A | firmware rev (0x2A26) = `VERSION_STRING`, software rev (0x2A28) = `VERSION_NUM` (`config::BUILD_NUM`, "-" outside `make`), model `SW102`, manufacturer `PET` |
 
-**Telemetry**: 14 bytes, little-endian, notified at 1 Hz while subscribed.
+**Telemetry**: 16 bytes, little-endian, notified at 1 Hz while subscribed. Version 3 added `pack_cv`; v2 was the same 14 bytes without it.
 
 | Offset | Field | Type | Notes |
 |---|---|---|---|
-| 0 | version | u8 | 2 |
+| 0 | version | u8 | 3 |
 | 1 | speed_x10 | u16 | km/h × 10 |
-| 3 | power_w | u16 | |
+| 3 | power_w | u16 | motor current × `pack_cv`, or × 52 V while that is 0 |
 | 5 | soc | u8 | %; 0xFF before the first reading |
 | 6 | pas | u8 | 0–9 |
 | 7 | speed_limit | u8 | km/h; > 25 = sport |
 | 8 | flags | u8 | bit0 lights (the effective state, AUTO applied), bit1 walk, bit2 motor link up |
 | 9 | error | u8 | 0 = none, else STATUS code; 0xFF = link lost |
 | 10 | odo_hm | u32 | 100 m units |
+| 14 | pack_cv | u16 | pack voltage, 10 mV units, from the battery sense (§16 #11); 0 = no plausible reading (outside `VBAT_VALID_MV`, 30–65 V) |
 
 **Trips**: one **18-byte record per notification**, identified by `id`. All four records
 are sent one after another every 5 s while subscribed (one per 20 ms tick, so a burst
@@ -1081,7 +1082,7 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 8 | **Auto-connect in the field** | Phone background behavior varies by vendor | Ride with the app on your own phone |
 | 9 | **DFU security** | public signing key, unauthenticated bootloader | Accepted |
 | 10 | **M5 BLE on hardware** | GATT table must fit S130's default attribute table (else a reset loop at boot); advertising/notify untested on the chip | Boot the M5 build; `tools/ble-phone.py` sees telemetry, trips and commands |
-| 11 | **Battery sense ADC** | Real pack voltage without `bbs-fw` (better SoC, low-voltage warning). SS's dead `adc.c` read AIN2 (P0.01) behind a 300k/16k divider (from @LowPerformer), never confirmed | Diagnostics shows `VB <raw> <volts>` (`Diag::VbatAdc`, nominal divider). Compare with a multimeter at the display connector at 2–3 charge levels: proportional = divider confirmed, slope gives the real ratio; 0 or noise = wrong pin |
+| 11 | **Battery sense ADC** | Real pack voltage without `bbs-fw` (better SoC, low-voltage warning). SS's dead `adc.c` read AIN2 (P0.01) behind a 300k/16k divider (from @LowPerformer), confirmed on PET 2026-10-17: the nominal divider matches a multimeter | Diagnostics shows `VB <raw> <volts>` (`Diag::VbatAdc`, nominal divider). Compare with a multimeter at the display connector at 2–3 charge levels: proportional = divider confirmed, slope gives the real ratio; 0 or noise = wrong pin |
 
 ---
 
@@ -1145,3 +1146,4 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-15 | Clock above the page tile (PRODUCT §3.6): the tile shrinks to 0, 16, 26, 48 (note/key/action glyphs re-centred from `h / 2`); the clock is in `W95_CLOCK` (W95FA at ×1, `0-9:`, 9 px, `HH:MM` ≤ 25 px); `Model::clock_min` = `lights.clock` minutes while `BleState::CONNECTED`, else `None` (nothing drawn). No new state, reuses the AUTO lights `DayClock` |
 | 2026-10-16 | Battery sense on Diagnostics (§16 #11): `hal_vbat_poll()` every 100 ms in the main loop latches the last NRF_ADC conversion (10 bit, 1/3 prescale, VBG ref, AIN2) and starts the next, never waiting; `Diag::VbatAdc` = raw counts; `config::VBAT_DIVIDER_K` (300, 16) turns them into volts for the top-right `VB` readout. The title line drops `SWET102 ` to make room. Display only, nothing uses the voltage yet |
 | 2026-10-17 | DFU entry is manual only (display off, M + PWR ~8 s → `SW102_DFU`, then swet102-app's OTA tab): removed Menu → Update (`Item::Dfu`, `Screen::Update`, `Overlay::Update`, `Power::Dfu`), `DFU!` on the control characteristic, `Hal::reboot_to_dfu` / `dfu.c`. Device Information gets the software revision (0x2A28) = `VERSION_NUM` via `swet_build_num()`, so the app can compare it with the zip's `fw_version` |
+| 2026-10-17 | Battery sense confirmed on hardware, now used (§16 #11): `vbat::pack_mv` turns `Diag::VbatAdc` into the pack voltage, `None` outside `config::VBAT_VALID_MV` (30–65 V: no sample, floating pin, bench supply). `Model::power_w` = current × that voltage, else × `PACK_V`; the Power view shows the volts top right. Telemetry v3 (16 B) appends `pack_cv` (u16, 10 mV, 0 = none); swet102-app reads v2 and v3. Unfiltered: one 100 ms sample, ~70 mV per count, good enough for watts at 1 Hz. SoC stays the controller's |
