@@ -97,7 +97,7 @@ The screen is split into three columns:
 |---|---|---|
 | 1 — Page | ~20% | The active **page**, drawn as a **filled white tile with rounded corners**. The page glyph is drawn **black** (inverted) on top. LEFT/RIGHT act on this page. |
 | 2 — Info pane | ~70% | Riding data. Default: **speed** in a big, fun font. |
-| 3 — Battery | ~10% | Pack voltage, battery icon + percentage. |
+| 3 — Battery | 15 px | Pack voltage, battery icon + percentage. |
 
 ### 3.1 Pages (column 1)
 
@@ -175,7 +175,7 @@ accumulator approach as Swang Stodva's `rt_calc_odometer()`.
 
 Battery icon plus the % reported by the stock controller. Swang Stodva has shown this value to be stable on PET, so it's used as-is, with no extra filtering or voltage-based estimate.
 
-Above the icon, in the top 16 px like the clock over the page tile (§3.6), the **pack voltage** from the display's battery sense in whole volts (`54`, small 3×5 font). Nothing is drawn there without a plausible reading. The icon starts at the tile's top edge, so columns 1 and 3 line up. The % under the icon is in the clock's W95FA (9 px); `100` is wider than the column and shifts left to stay on screen.
+Above the icon, in the top 16 px like the clock over the page tile (§3.6), the **pack voltage** from the display's battery sense with one decimal (`54.9`, small 3×5 font). Nothing is drawn there without a plausible reading. The icon (13 px wide) starts at the tile's top edge, so columns 1 and 3 line up. The % under the icon is in the clock's W95FA (9 px). The column is 15 px, exactly the width of `54.9` and `100`.
 
 The **battery icon also shows the riding mode**, so no separate mode badge is needed:
 
