@@ -1,10 +1,12 @@
-//! M6: boot animation, page, PAS and info-pane slides; input never
-//! waits behind an animation.
+//! M6: boot animation, page, PAS and trips slides; input never waits
+//! behind an animation.
 
 use swet_heart::store::Record;
 use swet_heart::ui::boot;
+use swet_heart::ui::menu::Item;
 use swet_heart::ui::popup::{Fault, Popup};
-use swet_heart::ui::ride::{Page, View};
+use swet_heart::ui::ride::Page;
+use swet_heart::ui::trips::{self, View};
 use swet_heart::ui::{Screen, ride};
 use swet_heart::{Buttons, STORE_LEN, config};
 use swet_sim::Sim;
@@ -117,25 +119,38 @@ fn pas_change_slides_the_number() {
     assert!(!s.app().animating());
 }
 
-#[test]
-fn pane_slides_up_with_live_views() {
-    let mut s = riding(27);
+/// Menu → Trips, from the ride screen.
+fn open_trips(s: &mut Sim) {
+    s.hold(Buttons::M, 1200);
+    while s.app().menu_item() != Item::Trips {
+        s.click(Buttons::RIGHT);
+    }
     s.click(Buttons::M);
-    s.run_ms(100);
-    s.press(Buttons::M); // the second press is the double-click
-    until(&mut s, |s| s.app().view() == View::Power);
+    assert_eq!(s.app().screen(), Screen::Trips);
+}
+
+#[test]
+fn trips_views_slide_sideways() {
+    let mut s = riding(27);
+    s.run_ms(5000);
+    open_trips(&mut s);
+    s.press(Buttons::RIGHT);
+    s.run_ms(60);
+    s.release(Buttons::RIGHT); // the click fires on release
+    until(&mut s, |s| s.app().trips_view() == View::Trip);
     s.run_ms(40);
-    s.assert_screen("m6_pane_slide"); // speed leaving at the top, power coming up
-    s.release(Buttons::M);
-    s.run_ms(u32::from(ride::PANE_SLIDE_MS));
+    s.assert_screen("m6_trips_slide"); // RIDE leaving to the left, TRIP coming in
+    s.run_ms(u32::from(trips::SLIDE_MS));
     assert!(!s.app().animating());
 }
 
 #[test]
 fn a_press_snaps_a_running_animation_to_its_end() {
     let mut s = riding(27);
-    s.double_click(Buttons::M);
-    until(&mut s, |s| s.app().view() == View::Power);
+    s.run_ms(5000);
+    open_trips(&mut s);
+    s.click(Buttons::RIGHT);
+    until(&mut s, |s| s.app().trips_view() == View::Trip);
     assert!(s.app().animating());
     s.press(Buttons::RIGHT);
     s.run_ms(60); // debounced: the press arrives
@@ -145,7 +160,11 @@ fn a_press_snaps_a_running_animation_to_its_end() {
     );
     s.release(Buttons::RIGHT);
     s.run_ms(60);
-    assert_eq!(s.app().state().pas, 1, "and the press was handled");
+    assert_eq!(
+        s.app().trips_view(),
+        View::BattTrip,
+        "and the press was handled"
+    );
 }
 
 #[test]

@@ -1,8 +1,9 @@
-//! M1: ride screen, PAS page, speed/power views, gestures, motor I/O.
+//! M1: ride screen, PAS page, speed, the Power screen, gestures, motor I/O.
 
 use swet_heart::Buttons;
 use swet_heart::ui::Screen;
-use swet_heart::ui::ride::{Page, View};
+use swet_heart::ui::menu::Item;
+use swet_heart::ui::ride::Page;
 use swet_sim::Sim;
 
 fn riding(kmh: u32) -> Sim {
@@ -17,7 +18,6 @@ fn riding(kmh: u32) -> Sim {
 fn speed_view_shows_motor_speed() {
     let s = riding(27);
     assert!(s.app().motor().link_up());
-    assert_eq!(s.app().view(), View::Speed);
     s.assert_screen("m1_speed_27");
 }
 
@@ -91,38 +91,39 @@ fn hold_left_above_pas_0_does_nothing() {
     assert_eq!(s.app().state().pas, 1, "a hold is not a click");
 }
 
-#[test]
-fn m_double_click_switches_view_not_page() {
-    let mut s = riding(20);
-    s.double_click(Buttons::M);
-    s.run_ms(400);
-    assert_eq!(s.app().view(), View::Power);
-    assert_eq!(s.app().page(), Page::Pas);
-    s.assert_screen("m1_power");
-    // the rest of the ring (M4): trip, battery trip, ride, odometer, back to speed
-    for v in [
-        View::Trip,
-        View::BattTrip,
-        View::Ride,
-        View::Odo,
-        View::Speed,
-    ] {
-        s.double_click(Buttons::M);
-        s.run_ms(400);
-        assert_eq!(s.app().view(), v);
+/// Menu → Power, from the ride screen.
+fn open_power(s: &mut Sim) {
+    s.hold(Buttons::M, 1200);
+    while s.app().menu_item() != Item::Power {
+        s.click(Buttons::RIGHT);
     }
+    s.click(Buttons::M);
+    assert_eq!(s.app().screen(), Screen::Power);
 }
 
 #[test]
-fn m_single_click_waits_for_the_double_click_window() {
+fn power_is_a_menu_screen() {
     let mut s = riding(20);
-    s.click(Buttons::M);
-    s.run_ms(400);
-    assert_eq!(
-        s.app().view(),
-        View::Speed,
-        "single click is next page, not next view"
-    );
+    open_power(&mut s);
+    s.assert_screen("m1_power");
+    s.click(Buttons::PWR);
+    assert_eq!(s.app().screen(), Screen::Menu);
+}
+
+#[test]
+fn m_click_is_instant_no_double_click_wait() {
+    let mut s = riding(20);
+    s.press(Buttons::M);
+    s.run_ms(60);
+    s.release(Buttons::M);
+    s.run_ms(40); // debounce only
+    assert_eq!(s.app().page(), Page::Player);
+    // a quick second click is the next page, not a double-click
+    s.press(Buttons::M);
+    s.run_ms(60);
+    s.release(Buttons::M);
+    s.run_ms(40);
+    assert_eq!(s.app().page(), Page::Gate);
 }
 
 #[test]
@@ -202,9 +203,8 @@ fn power_uses_the_measured_pack_voltage() {
     // `100` is the widest battery %: it must stay on screen
     s.motor().soc = 100;
     s.run_ms(1000);
-    s.double_click(Buttons::M);
-    s.run_ms(400);
-    assert_eq!(s.app().view(), View::Power);
+    open_power(&mut s);
+    s.run_ms(100);
     // 12 A × 54.16 V, not × 52 V
     s.assert_screen("m1_power_measured");
 }

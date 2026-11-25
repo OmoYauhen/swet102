@@ -3,10 +3,12 @@
 use super::Model;
 use super::anim::{Tween, travel};
 use crate::blep::Command;
-use crate::gfx::assets::{SMALL, SPEED, W95, W95_CLOCK};
-use crate::gfx::{Frame, H, Mode, num};
+use crate::gfx::assets::{
+    BLOX, DIGITAL7, GLAMOUR, KARMA, NEON, NEXA_RUST, PLASMA_DRIP, SMALL, SPEED, TEXT, W95,
+    W95_CLOCK,
+};
+use crate::gfx::{Font, Frame, Mode, W, num};
 use crate::input::{Btn, BtnCfg, GestureCfg};
-use crate::rides::Trip;
 
 /// Column 1: white rounded tile, under the clock row.
 const TILE: (i32, i32, i32, i32) = (0, 16, 26, 48);
@@ -61,30 +63,76 @@ impl Page {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum View {
-    Speed,
-    Power,
-    Trip,
-    BattTrip,
-    Ride,
-    Odo,
+/// The speed's font, picked on Menu → Speed font (PRODUCT §3.2) and saved.
+/// `Karma` first: a fresh App and a record from before the setting (byte 6
+/// was reserved, 0) both get it.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum SpeedFont {
+    #[default]
+    Karma,
+    Digital7,
+    NexaRust,
+    Blox,
+    Glamour,
+    /// Monoton, renamed: its licence reserves the name for the original.
+    Neon,
+    PlasmaDrip,
+    /// 04B_30, the speed font until 2026-11 (also the distances and watts).
+    B30,
 }
 
-impl View {
-    /// Ring order (PRODUCT §3.2).
-    const RING: [View; 6] = [
-        View::Speed,
-        View::Power,
-        View::Trip,
-        View::BattTrip,
-        View::Ride,
-        View::Odo,
+impl SpeedFont {
+    /// Ring order on the choice screen.
+    pub const ALL: [SpeedFont; 8] = [
+        SpeedFont::Karma,
+        SpeedFont::Digital7,
+        SpeedFont::NexaRust,
+        SpeedFont::Blox,
+        SpeedFont::Glamour,
+        SpeedFont::Neon,
+        SpeedFont::PlasmaDrip,
+        SpeedFont::B30,
     ];
 
-    fn next(self) -> View {
-        let i = Self::RING.iter().position(|&v| v == self).unwrap_or(0);
-        Self::RING[(i + 1) % Self::RING.len()]
+    /// Unknown values (a newer firmware's font) fall back to the default.
+    pub fn from_u8(v: u8) -> SpeedFont {
+        Self::ALL.get(usize::from(v)).copied().unwrap_or_default()
+    }
+
+    pub fn label(self) -> &'static [u8] {
+        match self {
+            SpeedFont::Karma => b"Karma",
+            SpeedFont::Digital7 => b"Digital-7",
+            SpeedFont::NexaRust => b"Nexa Rust",
+            SpeedFont::Blox => b"Blox",
+            SpeedFont::Glamour => b"Glamour Girl",
+            SpeedFont::Neon => b"Neon",
+            SpeedFont::PlasmaDrip => b"Plasma Drip",
+            SpeedFont::B30 => b"04B_30",
+        }
+    }
+
+    fn font(self) -> &'static Font {
+        match self {
+            SpeedFont::Karma => &KARMA,
+            SpeedFont::Digital7 => &DIGITAL7,
+            SpeedFont::NexaRust => &NEXA_RUST,
+            SpeedFont::Blox => &BLOX,
+            SpeedFont::Glamour => &GLAMOUR,
+            SpeedFont::Neon => &NEON,
+            SpeedFont::PlasmaDrip => &PLASMA_DRIP,
+            SpeedFont::B30 => &SPEED,
+        }
+    }
+
+    /// Pixels between the two digits (Digital-7's cells already carry
+    /// their own space on the left).
+    fn gap(self) -> i32 {
+        match self {
+            SpeedFont::Digital7 => 0,
+            _ => 2,
+        }
     }
 }
 
@@ -153,13 +201,11 @@ impl TileGlyph {
 
 /// Animations are compile-time constants (PRODUCT §3.4).
 pub const PAGE_SLIDE_MS: u16 = 150;
-pub const PANE_SLIDE_MS: u16 = 200;
 pub const PAS_SLIDE_MS: u16 = 100;
 
-/// The ride screen's own state. Zero-initialised: `Pas`, `Speed`, idle tweens.
+/// The ride screen's own state. Zero-initialised: `Pas`, idle tweens.
 pub struct RideScreen {
     pub page: Page,
-    pub view: View,
     /// Inside the tile, `tile_from` leaves and the current glyph arrives:
     /// it comes in from the right, or from the left when `tile_back` (PWR back
     /// to PAS, or a lower PAS level). False by default, so the App stays
@@ -167,9 +213,6 @@ pub struct RideScreen {
     tile: Tween,
     tile_from: TileGlyph,
     tile_back: bool,
-    /// Info-pane slide: `pane_from` leaves at the top, `view` comes up from the bottom.
-    pane: Tween,
-    pane_from: View,
     /// The last Player command and when it went out.
     action: PlayerAction,
     action_at: u32,
@@ -185,12 +228,9 @@ impl RideScreen {
     pub const fn new() -> Self {
         Self {
             page: Page::Pas,
-            view: View::Speed,
             tile: Tween::IDLE,
             tile_from: TileGlyph::Pas(0),
             tile_back: false,
-            pane: Tween::IDLE,
-            pane_from: View::Speed,
             action: PlayerAction::None,
             action_at: 0,
         }
@@ -201,13 +241,6 @@ impl RideScreen {
         self.slide_tile(self.glyph(m, now), false, PAGE_SLIDE_MS, now);
         self.action = PlayerAction::None;
         self.page = self.page.next();
-    }
-
-    /// M double-click: the next info view slides up from the bottom.
-    pub fn next_view(&mut self, now: u32) {
-        self.pane_from = self.view;
-        self.pane.start(now, PANE_SLIDE_MS);
-        self.view = self.view.next();
     }
 
     /// PWR click: back to PAS, sliding in from the left (the way back round the ring).
@@ -261,20 +294,25 @@ impl RideScreen {
     /// Any input finishes running animations first (TECH_DESIGN §5.4).
     pub fn snap(&mut self) {
         self.tile.snap();
-        self.pane.snap();
     }
 
     pub fn animating(&self, now: u32) -> bool {
-        self.tile.running(now) || self.pane.running(now)
+        self.tile.running(now)
     }
 
+    /// M has no double-click, so its click (next page) is instant; PWR's
+    /// double-click is the lock.
     pub fn gesture_cfg(&self) -> GestureCfg {
-        let both = BtnCfg {
+        let m = BtnCfg {
+            double: false,
+            hold: true,
+        };
+        let pwr = BtnCfg {
             double: true,
             hold: true,
         };
         self.page
-            .gestures(GestureCfg::SIMPLE.with(Btn::M, both).with(Btn::Pwr, both))
+            .gestures(GestureCfg::SIMPLE.with(Btn::M, m).with(Btn::Pwr, pwr))
     }
 
     pub fn render(&self, f: &mut Frame, m: &Model, now: u32) {
@@ -282,16 +320,9 @@ impl RideScreen {
         // drawn black on the black gap and pane, so the pane drawn after it
         // covers the spill.
         self.render_tile(f, m, now);
-        match self.pane.eased(now) {
-            Some(e) => {
-                // the old view leaves at the top, the new one comes up from the
-                // bottom; both live, the screen edges clip them
-                let dy = travel(H, e);
-                render_pane(f, self.pane_from, m, -dy);
-                render_pane(f, self.view, m, H - dy);
-            }
-            None => render_pane(f, self.view, m, 0),
-        }
+        let speed = m.speed_x10.map(|s| (u32::from(s) + 5) / 10);
+        let sf = m.speed_font;
+        big_value(f, sf.font(), sf.gap(), PANE_X, PANE_W, speed, b"km/h");
         if m.lights {
             lights_mark(f);
         }
@@ -447,113 +478,49 @@ fn render_clock(f: &mut Frame, m: &Model) {
     f.text(&W95_CLOCK, &s, x + (w - tw) / 2, ty, 1, Mode::Set);
 }
 
-/// Big number centred in the pane with a small unit underneath.
-fn big_value(f: &mut Frame, dy: i32, value: Option<u32>, unit: &[u8]) {
-    let top = 8 + dy;
+/// Big number in `font` (`gap` px between digits), centred in the `w` px
+/// column at `x` and in the rows above a small unit (the speed here, the
+/// watts on Menu → Power).
+pub(super) fn big_value(
+    f: &mut Frame,
+    font: &Font,
+    gap: i32,
+    x: i32,
+    w: i32,
+    value: Option<u32>,
+    unit: &[u8],
+) {
+    let unit_y = 64 - i32::from(SMALL.height) - 3;
+    let top = (unit_y - 1 - i32::from(font.height)) / 2;
     match value {
         Some(v) => {
             let mut d = [0u8; 10];
             let s = num::u32_dec(v, &mut d);
-            let w = SPEED.width(s, 2);
-            f.text(&SPEED, s, PANE_X + (PANE_W - w) / 2, top, 2, Mode::Set);
+            let vw = font.width(s, gap);
+            f.text(font, s, x + (w - vw) / 2, top, gap, Mode::Set);
         }
         None => {
             // no data yet: two dashes
-            let cy = top + i32::from(SPEED.height) / 2 - 2;
-            f.fill_rect(PANE_X + PANE_W / 2 - 22, cy, 18, 5, Mode::Set);
-            f.fill_rect(PANE_X + PANE_W / 2 + 4, cy, 18, 5, Mode::Set);
+            let cy = top + i32::from(font.height) / 2 - 2;
+            f.fill_rect(x + w / 2 - 22, cy, 18, 5, Mode::Set);
+            f.fill_rect(x + w / 2 + 4, cy, 18, 5, Mode::Set);
         }
     }
     let uw = SMALL.width(unit, 1);
-    f.text(
-        &SMALL,
-        unit,
-        PANE_X + (PANE_W - uw) / 2,
-        dy + 64 - i32::from(SMALL.height) - 3,
-        1,
-        Mode::Set,
-    );
+    f.text(&SMALL, unit, x + (w - uw) / 2, unit_y, 1, Mode::Set);
 }
 
-/// One info view, shifted down by `dy` (a vertical slide moves it off the
-/// top or bottom of the screen, which clips it).
-fn render_pane(f: &mut Frame, view: View, m: &Model, dy: i32) {
-    match view {
-        View::Speed => big_value(f, dy, m.speed_x10.map(|s| (u32::from(s) + 5) / 10), b"km/h"),
-        View::Power => {
-            big_value(f, dy, m.power_w.map(u32::from), b"W");
-            f.text3x5(PANE_X, dy + 1, b"POWER", 1, Mode::Set);
-        }
-        View::Trip => trip_view(f, dy, b"TRIP", &m.trip),
-        View::BattTrip => trip_view(f, dy, b"BAT", &m.batt),
-        View::Ride => trip_view(f, dy, b"RIDE", &m.ride),
-        View::Odo => odo_view(f, dy, m),
-    }
-}
-
-/// Distance large with "km", centred in the pane. Below 1000 km with one
-/// decimal, above that in whole km.
-fn distance(f: &mut Frame, dy: i32, m: u32) {
-    let mut d = [0u8; 12];
-    let s = if m < 1_000_000 {
-        num::u32_dec1(m / 100, &mut d)
-    } else {
-        let mut w = [0u8; 10];
-        let s = num::u32_dec(m / 1000, &mut w);
-        d[..s.len()].copy_from_slice(s);
-        &d[..s.len()]
-    };
-    let (vw, uw) = (SPEED.width(s, 1), SMALL.width(b"km", 1));
-    let x = PANE_X + (PANE_W - (vw + 3 + uw)) / 2;
-    let y = dy + 7;
-    f.text(&SPEED, s, x, y, 1, Mode::Set);
-    let base = y + i32::from(SPEED.height);
-    f.text(
-        &SMALL,
-        b"km",
-        x + vw + 3,
-        base - i32::from(SMALL.height),
-        1,
-        Mode::Set,
-    );
-}
-
-fn line(f: &mut Frame, y: i32, parts: &[&[u8]]) {
-    let mut x = PANE_X;
-    for p in parts {
-        x = f.text3x5(x, y, p, 1, Mode::Set);
-    }
-}
-
-/// PRODUCT §3.2: distance, then max and average, then charge used.
-fn trip_view(f: &mut Frame, dy: i32, label: &[u8], t: &Trip) {
-    f.text3x5(PANE_X, dy + 1, label, 1, Mode::Set);
-    distance(f, dy, t.m);
-    let (mut a, mut b) = ([0u8; 12], [0u8; 12]);
-    line(
-        f,
-        dy + 45,
-        &[
-            b"MAX ",
-            num::u32_dec1(u32::from(t.max_x10), &mut a),
-            b"  AVG ",
-            num::u32_dec1(u32::from(t.avg_x10()), &mut b),
-        ],
-    );
-    let mut c = [0u8; 13];
-    line(f, dy + 53, &[num::u32_dec2(t.mah / 10, &mut c), b" AH"]);
-}
-
-/// Total distance and the all-time max speed.
-fn odo_view(f: &mut Frame, dy: i32, m: &Model) {
-    f.text3x5(PANE_X, dy + 1, b"ODO", 1, Mode::Set);
-    distance(f, dy, m.odo_m);
-    let mut a = [0u8; 12];
-    line(
-        f,
-        dy + 45,
-        &[b"MAX ", num::u32_dec1(u32::from(m.odo_max_x10), &mut a)],
-    );
+/// Menu → Speed font: the highlighted font's name between side arrows, and
+/// a speed in it at full size, below.
+pub fn render_font_choice(f: &mut Frame, sf: SpeedFont) {
+    let name = sf.label();
+    f.text(&TEXT, name, (W - TEXT.width(name, 1)) / 2, 1, 1, Mode::Set);
+    f.text3x5(3, 4, b"<", 1, Mode::Set);
+    f.text3x5(W - 6, 4, b">", 1, Mode::Set);
+    let (font, gap) = (sf.font(), sf.gap());
+    let s = b"27";
+    let top = 16 + (48 - i32::from(font.height)) / 2;
+    f.text(font, s, (W - font.width(s, gap)) / 2, top, gap, Mode::Set);
 }
 
 /// Battery icon (fill = SoC) with the percentage under it in the clock's

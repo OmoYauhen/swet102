@@ -11,9 +11,9 @@ Player and Gate pages, lights (OFF / ON / AUTO by the phone's clock), motor
 bus, error screens, saved settings, lock
 with city/sport PINs, auto power-off, trips with max/avg/Ah, battery-trip
 message, menu, BLE (telemetry, trips, phone commands, build number for OTA), boot
-animation, page, PAS and info-pane slides. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
+animation, page, PAS and trips slides. The phone side is [swet102-app](https://github.com/OmoYauhen/swet102-app).
 
-![swet102 demo: boot, PAS, pages, info pane](docs/demo.gif)
+![swet102 demo: boot, PAS, pages, menu](docs/demo.gif)
 
 ## Layout
 
@@ -87,9 +87,8 @@ to commands their glyph is dithered and LEFT / RIGHT do nothing.
 
 | Gesture | Does |
 |---|---|
-| M click | next page |
+| M click | next page (instant: M has no double-click) |
 | PWR click | back to the PAS page |
-| M double-click | next info view: speed → power → TRIP → BAT → RIDE → ODO |
 | M hold | menu (below) |
 | PWR hold | power off (settings are saved first) |
 | PWR double-click | **lock**: padlock, then off. The next power-on asks for a PIN |
@@ -165,7 +164,7 @@ The hardware checks from TECH_DESIGN §16 that the emulator can't answer:
 - [ ] **Menu → Lights → ON** switches the motor light and dims the screen; with
   the app connected after dark, the lights come on by themselves (AUTO).
 - [ ] Diagnostics screen: `TICK US` average stays well under 20 000 while pages and
-  panes slide (late frames only skip, but smooth slides need the headroom).
+  PAS numbers slide (late frames only skip, but smooth slides need the headroom).
 - [ ] A smoke ride, then `git tag v0.1.0`.
 
 ## Menu (M hold)
@@ -175,13 +174,15 @@ LEFT / RIGHT flip through the items (it wraps), M opens one, PWR goes back.
 | Item | Does |
 |---|---|
 | Lights: OFF / ON / AUTO | the label shows the mode in use; M opens the choice: LEFT / RIGHT pick, M sets, PWR leaves it as it was. AUTO = on from 20 min before sunset until sunrise, by the phone's time (off until the phone has sent it). Not saved: OFF after power-on, AUTO once the phone syncs (unless you've picked a mode). A small bulb in the top-right corner of the ride screen shows the lights are on |
-| Reset trip | zeroes the manual trip (asks first) |
+| Trips | RIDE / TRIP / BAT / ODO: LEFT / RIGHT step through them (it wraps), M resets the manual trip (asks first), PWR goes back |
+| Power | the wattmeter: motor current × the measured pack voltage |
+| Speed font | the speed's font: Karma, Digital-7, Nexa Rust, Blox, Glamour Girl, Neon, Plasma Drip or 04B_30. LEFT / RIGHT preview them at full size, M sets (saved), PWR leaves it as it was |
 | Bluetooth | phone connected?, commands on?, the display's BLE address, commands sent / notifications dropped |
 | Diagnostics | the screen below |
 | Firmware | version, build number (`VERSION_NUM`), git commit, and a QR code to this repo |
 | ♥ Special thanks | the last item: the people who helped, one name at a time, as written (`@entropia_pl`, `@yahor_k`, `@veganbunt`). LEFT / RIGHT step through them (it wraps); each name slides in like the boot text. PWR goes back |
 
-**Trips:** TRIP resets from the menu, BAT resets itself when the battery goes up
+**Trips:** TRIP resets with M on Menu → Trips, BAT resets itself when the battery goes up
 by 20 % or more (and shows how far the last charge went), RIDE starts at 0 on
 every power-on. Each shows distance, max and average speed (average over moving
 time only) and the charge used in Ah; ODO shows the total and the all-time max.
@@ -204,4 +205,10 @@ GPL-3.0. Some low-level code is adapted from
 [Swang Stodva](https://github.com/OmoYauhen/swang-stodva) and casainho's SW102 firmware.
 
 Fonts: 04B_30 digits (via Swang Stodva); **W95FA** by FontsArena, SIL Open Font
-License 1.1 (`assets/fonts/W95FA-OFL.txt`).
+License 1.1 (`assets/fonts/W95FA-OFL.txt`); **Karma Suture** (the speed) by
+Raymond Larabie, CC0 (`assets/fonts/Karma-CC0.txt`). Speed fonts, rasterised
+digits only (the font files aren't in the repo, see `assets/fonts/local/README.md`):
+**Digital-7** by Sizenko Alexander / Style-7 (styleseven.com), **Nexa Rust** by
+Fontfabric (fontfabric.com), **Blox** and **Plasma Drip** by Brian Kent (Ænigma),
+**Glamour Girl** by Jakob Fischer (pizzadude.dk); **Neon** is **Monoton** by Vernon
+Adams, SIL Open Font License 1.1 (`assets/fonts/Monoton-OFL.txt`).

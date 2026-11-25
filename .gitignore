@@ -5,3 +5,6 @@
 swet102-*.png
 emu-store.bin
 pins.env
+# third-party speed fonts: may be used, not shared (assets/fonts/local/README.md)
+/assets/fonts/local/*
+!/assets/fonts/local/README.md

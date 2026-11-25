@@ -43,8 +43,6 @@ pub const SAVE_BEFORE_OFF_MS: u32 = 500;
 pub const LOCK_FLASH_MS: u32 = 500;
 /// "WRONG PIN" stays on the PIN screen this long.
 pub const PIN_WRONG_MS: u32 = 1500;
-/// "Done" stays on a menu item this long after a confirmed action.
-pub const MENU_DONE_MS: u32 = 800;
 /// Distances are saved every this many meters while riding…
 pub const SAVE_EVERY_M: u32 = 1000;
 /// …and after standing still this long with at least `SAVE_STOPPED_MIN_M` unsaved.

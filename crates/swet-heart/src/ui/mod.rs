@@ -9,6 +9,7 @@ pub mod pin;
 pub mod popup;
 pub mod ride;
 pub mod thanks;
+pub mod trips;
 
 use crate::gfx::Frame;
 use crate::input::GestureCfg;
@@ -33,6 +34,12 @@ pub enum Screen {
     Lights,
     /// Menu → Special thanks: the names, LEFT/RIGHT to step through them.
     Thanks,
+    /// Menu → Trips: RIDE / TRIP / BAT / ODO, M resets the trip.
+    Trips,
+    /// Menu → Power: the wattmeter.
+    Power,
+    /// Menu → Speed font: pick the speed's font (LEFT/RIGHT, M set, PWR cancel).
+    SpeedFont,
 }
 
 const DEPTH: usize = 4;
@@ -99,6 +106,7 @@ pub struct Model {
     pub ride: crate::rides::Trip,
     pub odo_m: u32,
     pub odo_max_x10: u16,
+    pub speed_font: ride::SpeedFont,
 }
 
 /// Power-off overlay (TECH_DESIGN §8.3): the display goes dark the moment
@@ -119,6 +127,7 @@ pub struct Scene<'a> {
     pub menu: &'a menu::Menu,
     pub lights: &'a crate::lights::Lights,
     pub thanks: &'a thanks::Thanks,
+    pub trips: &'a trips::TripsScreen,
     pub ble: menu::BleInfo,
     pub model: &'a Model,
     pub diag: &'a diag::DiagData,
@@ -152,7 +161,7 @@ pub fn render(f: &mut Frame, s: &Scene) {
     match s.top {
         Screen::Ride => s.ride.render(f, s.model, s.now),
         Screen::Pin => s.pin.render(f, s.now),
-        Screen::Menu => s.menu.render(f, s.now, s.lights.mode),
+        Screen::Menu => s.menu.render(f, s.lights.mode),
         Screen::Confirm(c) => menu::render_confirm(f, c),
         Screen::Diag => diag::render(f, s.diag),
         Screen::Ble => menu::render_ble(f, &s.ble),
@@ -160,5 +169,8 @@ pub fn render(f: &mut Frame, s: &Scene) {
         Screen::Boot => boot::render(f, s.boot_elapsed),
         Screen::Lights => menu::render_lights(f, s.menu.choice(), s.lights, s.now),
         Screen::Thanks => s.thanks.render(f, s.now),
+        Screen::Trips => s.trips.render(f, s.model, s.now),
+        Screen::Power => trips::render_power(f, s.model),
+        Screen::SpeedFont => ride::render_font_choice(f, s.menu.font_choice()),
     }
 }
