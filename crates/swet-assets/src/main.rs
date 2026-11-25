@@ -160,6 +160,16 @@ const PIXEL_FONTS: &[PixelFontSrc] = &[
         scale: 1,
     },
     PixelFontSrc {
+        // Karma Suture (CC0, assets/fonts/Karma-CC0.txt), a pixel font on a
+        // ~49.2-unit grid, drawn ×2: the speed on the ride screen.
+        name: "KARMA",
+        file: "fonts/KarmaSuture.otf",
+        chars: "0123456789",
+        unit: 49.2,
+        x_origin: 0.0,
+        scale: 2,
+    },
+    PixelFontSrc {
         // W95FA at its own size: the HH:MM clock above the page tile.
         name: "W95_CLOCK",
         file: "fonts/W95FA.otf",
@@ -170,37 +180,119 @@ const PIXEL_FONTS: &[PixelFontSrc] = &[
     },
 ];
 
-/// Rasterise each char on the font's pixel grid, crop each glyph to its ink
-/// columns and all glyphs to their common ink rows, then scale up.
-fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
-    use ab_glyph::{Font as _, FontRef, PxScale, ScaleFont as _, point};
-    let data = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    let font = FontRef::try_from_slice(&data).expect("font");
-    // ab_glyph's PxScale is the pixel height of ascent − descent (not the em),
-    // so this makes one design pixel exactly one output pixel.
-    let px = font.height_unscaled() / src.unit;
+/// An ordinary outline font, rasterised at the size that makes its tallest
+/// glyph `height` px of ink and its widest at most `MAX_DIGIT_W` (1 bit: a
+/// pixel is lit at ≥ 50 % coverage).
+/// Widest digit for an outline font: two of them and a gap fit the 83 px
+/// pane. A wide font comes out shorter than its `height`.
+const MAX_DIGIT_W: usize = 40;
+
+struct OutlineFontSrc {
+    name: &'static str,
+    /// Under `assets/fonts/`.
+    file: &'static str,
+    chars: &'static str,
+    height: usize,
+    /// Every glyph as wide as the widest, ink to the right (a 7-segment
+    /// "1" keeps its place, so the speed doesn't shift as it changes).
+    mono: bool,
+}
+
+/// Speed fonts. Those under `local/` may be used by the firmware but their
+/// files may not be shared: they stay out of git (see the README there) and
+/// only the rasterised digits are committed.
+const OUTLINE_FONTS: &[OutlineFontSrc] = &[
+    OutlineFontSrc {
+        // Digital-7 (mono) by Style-7: freeware, embedding allowed, credit needed.
+        name: "DIGITAL7",
+        file: "local/digital-7 (mono).ttf",
+        chars: "0123456789",
+        height: 44,
+        mono: true,
+    },
+    OutlineFontSrc {
+        // Nexa Rust Sans Black by Fontfabric: free, credit needed.
+        name: "NEXA_RUST",
+        file: "local/NexaRustSans-Black.otf",
+        chars: "0123456789",
+        height: 44,
+        mono: false,
+    },
+    OutlineFontSrc {
+        // Blox by Brian Kent: freeware, any use.
+        name: "BLOX",
+        file: "local/Blox2.ttf",
+        chars: "0123456789",
+        height: 44,
+        mono: false,
+    },
+    OutlineFontSrc {
+        // Glamour Girl by Jakob Fischer (pizzadude.dk): non-commercial use.
+        name: "GLAMOUR",
+        file: "local/GLAMOURGIRL.TTF",
+        chars: "0123456789",
+        height: 44,
+        mono: false,
+    },
+    OutlineFontSrc {
+        // Monoton by Vernon Adams (SIL OFL 1.1, assets/fonts/Monoton-OFL.txt).
+        // "Monoton" is a Reserved Font Name, which this rasterised subset may
+        // not carry: on screen it's "Neon".
+        name: "NEON",
+        file: "Monoton-Regular.ttf",
+        chars: "0123456789",
+        height: 44,
+        mono: false,
+    },
+    OutlineFontSrc {
+        // Plasma Drip by Brian Kent: freeware, any use.
+        name: "PLASMA_DRIP",
+        file: "local/plasdrip.ttf",
+        chars: "0123456789",
+        height: 44,
+        mono: false,
+    },
+];
+
+/// Glyph canvas for the rasteriser: big enough for 46 px digits plus the
+/// ink some fonts put left of the origin.
+const CANVAS: usize = 96;
+const BASELINE: f32 = 72.0;
+/// Whole pixels left of the pen position, for glyphs that ink left of it.
+const PAD: f32 = 24.0;
+
+/// Each char of `src` on its own `CANVAS`² canvas, pen at (`PAD` + `dx`,
+/// `BASELINE`), lit where coverage ≥ 50 %.
+fn rasterise(font: &ab_glyph::FontRef, px: f32, dx: f32, chars: &str) -> Vec<Vec<bool>> {
+    use ab_glyph::{Font as _, PxScale, ScaleFont as _, point};
     let scaled = font.as_scaled(PxScale::from(px));
-    const CANVAS: usize = 64;
-    let baseline = 48.0;
-    // whole pixels left of the grid origin, for glyphs that ink left of it
-    const PAD: f32 = 8.0;
-    let mut glyphs: Vec<Vec<bool>> = Vec::new();
-    for c in src.chars.chars() {
-        let mut g = scaled.scaled_glyph(c);
-        g.position = point(PAD - src.x_origin / src.unit, baseline);
-        let mut canvas = vec![false; CANVAS * CANVAS];
-        if let Some(o) = font.outline_glyph(g) {
-            let b = o.px_bounds();
-            o.draw(|x, y, v| {
-                let (cx, cy) = (b.min.x as i32 + x as i32, b.min.y as i32 + y as i32);
-                if v >= 0.5 && (0..CANVAS as i32).contains(&cx) && (0..CANVAS as i32).contains(&cy)
-                {
-                    canvas[cy as usize * CANVAS + cx as usize] = true;
-                }
-            });
-        }
-        glyphs.push(canvas);
-    }
+    chars
+        .chars()
+        .map(|c| {
+            let mut g = scaled.scaled_glyph(c);
+            g.position = point(PAD + dx, BASELINE);
+            let mut canvas = vec![false; CANVAS * CANVAS];
+            if let Some(o) = font.outline_glyph(g) {
+                let b = o.px_bounds();
+                o.draw(|x, y, v| {
+                    let (cx, cy) = (b.min.x as i32 + x as i32, b.min.y as i32 + y as i32);
+                    if v >= 0.5
+                        && (0..CANVAS as i32).contains(&cx)
+                        && (0..CANVAS as i32).contains(&cy)
+                    {
+                        canvas[cy as usize * CANVAS + cx as usize] = true;
+                    }
+                });
+            }
+            canvas
+        })
+        .collect()
+}
+
+/// Crop each glyph to its ink columns (`mono`: the widest glyph's width,
+/// ink to the right) and all glyphs to their common ink rows, scale up by
+/// `scale`, and lay them out in one strip.
+fn strip(glyphs: &[Vec<bool>], scale: usize, mono: bool) -> (Bitmap, Vec<u16>) {
     let rows: Vec<usize> = (0..CANVAS)
         .filter(|&y| {
             glyphs
@@ -209,7 +301,7 @@ fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
         })
         .collect();
     let (top, bottom) = (rows[0], rows[rows.len() - 1] + 1);
-    let h = (bottom - top) * src.scale;
+    let h = (bottom - top) * scale;
     let mut cols: Vec<(usize, usize, usize)> = Vec::new(); // (glyph, x0, x1)
     for (i, g) in glyphs.iter().enumerate() {
         let ink: Vec<usize> = (0..CANVAS)
@@ -217,21 +309,74 @@ fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
             .collect();
         cols.push((i, ink[0], ink[ink.len() - 1] + 1));
     }
-    let w: usize = cols.iter().map(|&(_, a, b)| (b - a) * src.scale).sum();
+    if mono {
+        let widest = cols.iter().map(|&(_, a, b)| b - a).max().unwrap_or(0);
+        for c in &mut cols {
+            c.1 = c.2 - widest;
+        }
+    }
+    let w: usize = cols.iter().map(|&(_, a, b)| (b - a) * scale).sum();
     let mut px_out = vec![false; w * h];
     let mut offsets = vec![0u16];
     let mut ox = 0;
     for &(i, x0, x1) in &cols {
         for y in 0..h {
-            for x in 0..(x1 - x0) * src.scale {
-                let (sx, sy) = (x0 + x / src.scale, top + y / src.scale);
+            for x in 0..(x1 - x0) * scale {
+                let (sx, sy) = (x0 + x / scale, top + y / scale);
                 px_out[y * w + ox + x] = glyphs[i][sy * CANVAS + sx];
             }
         }
-        ox += (x1 - x0) * src.scale;
+        ox += (x1 - x0) * scale;
         offsets.push(ox as u16);
     }
     (Bitmap { w, h, px: px_out }, offsets)
+}
+
+fn load_font(path: &Path) -> Vec<u8> {
+    std::fs::read(path).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} (fonts under assets/fonts/local/ are not in git: see the README there)",
+            path.display()
+        )
+    })
+}
+
+/// Rasterise each char on the font's pixel grid, then crop and scale up.
+fn read_pixel_font(path: &Path, src: &PixelFontSrc) -> (Bitmap, Vec<u16>) {
+    use ab_glyph::{Font as _, FontRef};
+    let data = load_font(path);
+    let font = FontRef::try_from_slice(&data).expect("font");
+    // ab_glyph's PxScale is the pixel height of ascent − descent (not the em),
+    // so this makes one design pixel exactly one output pixel.
+    let px = font.height_unscaled() / src.unit;
+    strip(
+        &rasterise(&font, px, -src.x_origin / src.unit, src.chars),
+        src.scale,
+        false,
+    )
+}
+
+/// Rasterise at the size that makes the tallest glyph `src.height` px.
+fn read_outline_font(path: &Path, src: &OutlineFontSrc) -> (Bitmap, Vec<u16>) {
+    use ab_glyph::FontRef;
+    let data = load_font(path);
+    let font = FontRef::try_from_slice(&data).expect("font");
+    // ink height scales linearly with the size: measure at 40 px, then fix up
+    // the rounding a step at a time
+    let fits = |px: f32| {
+        let (bmp, offs) = strip(&rasterise(&font, px, 0.0, src.chars), 1, false);
+        let widest = offs.windows(2).map(|w| usize::from(w[1] - w[0])).max();
+        bmp.h <= src.height && widest.unwrap_or(0) <= MAX_DIGIT_W
+    };
+    let h40 = strip(&rasterise(&font, 40.0, 0.0, src.chars), 1, false).0.h;
+    let mut px = 40.0 * src.height as f32 / h40 as f32;
+    while !fits(px) {
+        px -= 0.25;
+    }
+    while fits(px + 0.25) {
+        px += 0.25;
+    }
+    strip(&rasterise(&font, px, 0.0, src.chars), 1, src.mono)
 }
 
 /// The repo URL for the Firmware screen's QR code. Lowercase means byte mode,
@@ -324,6 +469,29 @@ fn main() {
              stride: {stride},\n    chars: b\"{}\",\n    offsets: &{offs:?},\n    bits: &[",
             f.file,
             f.scale,
+            bmp.h,
+            f.name,
+            bmp.h,
+            f.chars.escape_default()
+        );
+        bytes_lit(&mut out, &bits);
+        out.push_str("],\n};\n");
+        if preview {
+            write_png(
+                &bmp,
+                &preview_dir.join(format!("{}.png", f.name.to_lowercase())),
+            );
+        }
+    }
+
+    for f in OUTLINE_FONTS {
+        let (bmp, offs) = read_outline_font(&assets.join("fonts").join(f.file), f);
+        let (stride, bits) = bmp.pack();
+        let _ = write!(
+            out,
+            "\n/// From `fonts/{}` ({} px tall).\npub static {}: Font = Font {{\n    height: {},\n    \
+             stride: {stride},\n    chars: b\"{}\",\n    offsets: &{offs:?},\n    bits: &[",
+            f.file,
             bmp.h,
             f.name,
             bmp.h,

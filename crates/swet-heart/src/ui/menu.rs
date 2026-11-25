@@ -7,12 +7,15 @@ use crate::config;
 use crate::gfx::assets::{QR_REPO, TEXT};
 use crate::gfx::{Frame, Mode, W, num};
 use crate::lights::{Lights, LightsMode};
+use crate::ui::ride::SpeedFont;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum Item {
     Lights,
-    ResetTrip,
+    Trips,
+    Power,
+    SpeedFont,
     Ble,
     Diagnostics,
     Firmware,
@@ -21,9 +24,11 @@ pub enum Item {
 
 impl Item {
     /// Ring order (PRODUCT §5).
-    pub const ALL: [Item; 6] = [
+    pub const ALL: [Item; 8] = [
         Item::Lights,
-        Item::ResetTrip,
+        Item::Trips,
+        Item::Power,
+        Item::SpeedFont,
         Item::Ble,
         Item::Diagnostics,
         Item::Firmware,
@@ -33,7 +38,9 @@ impl Item {
     fn label(self) -> &'static [u8] {
         match self {
             Item::Lights => b"Lights",
-            Item::ResetTrip => b"Reset trip",
+            Item::Trips => b"Trips",
+            Item::Power => b"Power",
+            Item::SpeedFont => b"Speed font",
             Item::Ble => b"Bluetooth",
             Item::Diagnostics => b"Diagnostics",
             Item::Firmware => b"Firmware",
@@ -44,7 +51,9 @@ impl Item {
     fn icon(self) -> &'static Icon {
         match self {
             Item::Lights => &ICON_BULB,
-            Item::ResetTrip => &ICON_RESET,
+            Item::Trips => &ICON_FLAG,
+            Item::Power => &ICON_BOLT,
+            Item::SpeedFont => &ICON_DIGIT,
             Item::Ble => &ICON_BLE,
             Item::Diagnostics => &ICON_WRENCH,
             Item::Firmware => &ICON_INFO,
@@ -62,11 +71,10 @@ pub enum Confirm {
 
 pub struct Menu {
     index: u8,
-    /// "Done" replaces the label until this time (after a confirmed reset).
-    done_until: u32,
-    done: bool,
     /// Lights screen: the highlighted choice, index into `LightsMode::ALL`.
     choice: u8,
+    /// Speed font screen: the highlighted font, index into `SpeedFont::ALL`.
+    font: u8,
 }
 
 impl Default for Menu {
@@ -79,9 +87,8 @@ impl Menu {
     pub const fn new() -> Self {
         Self {
             index: 0,
-            done_until: 0,
-            done: false,
             choice: 0,
+            font: 0,
         }
     }
 
@@ -118,24 +125,31 @@ impl Menu {
         LightsMode::ALL[usize::from(self.choice) % LightsMode::ALL.len()]
     }
 
-    pub fn show_done(&mut self, now: u32) {
-        self.done = true;
-        self.done_until = now.wrapping_add(config::MENU_DONE_MS);
+    /// Speed font screen opens on the font in use.
+    pub fn open_speed_font(&mut self, sf: SpeedFont) {
+        self.font = sf as u8;
+    }
+
+    /// LEFT/RIGHT on the speed font screen (wraps).
+    pub fn font_step(&mut self, forward: bool) {
+        let n = SpeedFont::ALL.len() as u8;
+        self.font = (self.font + if forward { 1 } else { n - 1 }) % n;
+    }
+
+    pub fn font_choice(&self) -> SpeedFont {
+        SpeedFont::from_u8(self.font)
     }
 
     /// `lights`: the mode in use, shown on the Lights item.
-    pub fn render(&self, f: &mut Frame, now: u32, lights: LightsMode) {
+    pub fn render(&self, f: &mut Frame, lights: LightsMode) {
         let item = self.item();
         draw_icon(f, item.icon(), (W - 32) / 2, 3);
         // side arrows: there is more in both directions (the ring wraps)
         f.text3x5(6, 15, b"<", 2, Mode::Set);
         f.text3x5(W - 12, 15, b">", 2, Mode::Set);
 
-        let showing_done = self.done && now.wrapping_sub(self.done_until) > u32::MAX / 2;
         let mut buf = [0u8; 16];
-        let label = if showing_done {
-            b"Done".as_slice()
-        } else if item == Item::Lights {
+        let label = if item == Item::Lights {
             // "Lights: AUTO": the mode is visible without opening the item
             let (name, mode) = (item.label(), lights.label());
             let n = name.len() + 2 + mode.len();
@@ -412,22 +426,61 @@ const ICON_BULB: Icon = [
     b"................",
 ];
 
-const ICON_RESET: Icon = [
-    b"......#####.....",
-    b"....##.....##.#.",
-    b"...#.........##.",
-    b"..#.........###.",
+const ICON_FLAG: Icon = [
     b"..#.............",
-    b".#..............",
-    b".#..............",
-    b".#..............",
-    b".#..............",
-    b".#.............#",
-    b"..#............#",
-    b"..#...........#.",
-    b"...#.........#..",
-    b"....##.....##...",
-    b"......#####.....",
+    b"..#####...####..",
+    b"..#...#####..#..",
+    b"..#..........#..",
+    b"..#..........#..",
+    b"..#..........#..",
+    b"..#...####...#..",
+    b"..#####..#####..",
+    b"..#.............",
+    b"..#.............",
+    b"..#.............",
+    b"..#.............",
+    b"..#.............",
+    b"..#.............",
+    b".###............",
+    b"................",
+];
+
+/// A 7-segment "8".
+const ICON_DIGIT: Icon = [
+    b"................",
+    b"....#######.....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"....#######.....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"...#.......#....",
+    b"....#######.....",
+    b"................",
+    b"................",
+];
+
+const ICON_BOLT: Icon = [
+    b"..........###...",
+    b".........##.#...",
+    b"........##..#...",
+    b".......##..#....",
+    b"......##...#....",
+    b".....##...#.....",
+    b"....##....######",
+    b"...#######....#.",
+    b".........#...#..",
+    b"........#...#...",
+    b"........#..#....",
+    b".......#..#.....",
+    b".......#.#......",
+    b"......#.#.......",
+    b"......##........",
     b"................",
 ];
 
@@ -502,7 +555,7 @@ mod tests {
         m.next();
         m.next();
         m.next();
-        assert_eq!(m.item(), Item::ResetTrip);
+        assert_eq!(m.item(), Item::Trips);
         m.open();
         assert_eq!(m.item(), Item::Lights);
     }

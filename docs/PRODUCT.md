@@ -96,7 +96,7 @@ The screen is split into three columns:
 | Column | Width | Content |
 |---|---|---|
 | 1 — Page | ~20% | The active **page**, drawn as a **filled white tile with rounded corners**. The page glyph is drawn **black** (inverted) on top. LEFT/RIGHT act on this page. |
-| 2 — Info pane | ~70% | Riding data. Default: **speed** in a big, fun font. |
+| 2 — Info pane | ~70% | **Speed** in a big, fun font. |
 | 3 — Battery | 15 px | Pack voltage, battery icon + percentage. |
 
 ### 3.1 Pages (column 1)
@@ -128,16 +128,32 @@ or a dithered pattern. The exact look gets settled in the emulator.
 
 ### 3.2 Info pane (column 2)
 
-**M double-click** cycles the info pane in a ring:
+The pane shows the **speed** only, in km/h, centred in the 83 × 48 px above
+`km/h`. The font is the rider's pick (Menu → Speed font, §5; saved):
 
-1. **Speed** (default): **04B_30 digits, 34 px** (reused from Swang Stodva, generated with `tools/ttf2font.py`), km/h. Start with this font and judge it in the emulator; a bigger font can come later.
-2. **Power**: watts = motor current × the pack voltage measured by the display's battery sense (shown above the battery icon, §3.3). Stock firmware doesn't report voltage; without a plausible reading (30–65 V) the watts use the nominal 52 V
-3. **Trip**: manual trip, since the last reset in the menu
-4. **Battery trip**: since the last charge (auto-reset, see below)
-5. **Ride**: since this power-on (RAM only, starts at 0 on every boot)
-6. **Odometer**: total km, plus all-time max speed
+| Font | Digits | Licence |
+|---|---|---|
+| **Karma Suture** (default) | pixel font ×2, 36 px | CC0 (Raymond Larabie) |
+| **Digital-7** (mono) | 7-segment, 44 px, equal-width cells | freeware, credit (Style-7) |
+| **Nexa Rust** Sans Black | heavy sans, 44 px | free, credit (Fontfabric) |
+| **Blox** | bricks, 44 px | freeware (Brian Kent) |
+| **Glamour Girl** | round, bouncy figures, 44 px | non-commercial use (Jakob Fischer, pizzadude.dk) |
+| **Neon** | Monoton's triple-line tubes, 44 px; renamed because the OFL reserves "Monoton" for the original | SIL OFL 1.1 (Vernon Adams) |
+| **Plasma Drip** | dripping, 44 px | freeware (Brian Kent) |
+| **04B_30** | the original 34 px digits | via Swang Stodva |
 
-Each view shows a short label (e.g. `TRIP`, `BAT`, `RIDE`, `ODO`) so the three distance counters can't be confused.
+M has no double-click on the ride screen, so M clicks switch pages at once (§4).
+
+The other riding data lives in the menu (§5):
+
+- **Trips** (LEFT/RIGHT step through them, wrapping; M resets the trip):
+  1. **Ride**: since this power-on (RAM only, starts at 0 on every boot)
+  2. **Trip**: manual trip, since the last reset (M on the Trips screen)
+  3. **Battery trip**: since the last charge (auto-reset, see below)
+  4. **Odometer**: total km, plus all-time max speed
+- **Power**: watts = motor current × the pack voltage measured by the display's battery sense (shown above the battery icon, §3.3). Stock firmware doesn't report voltage; without a plausible reading (30–65 V) the watts use the nominal 52 V
+
+Each trip view shows a short label (`RIDE`, `TRIP`, `BAT`, `ODO`) so the three distance counters can't be confused.
 
 #### Trip statistics
 
@@ -157,7 +173,7 @@ stats in a small font underneath:
 - **Average speed** = distance ÷ **moving time**, where moving time counts only while the wheel turns. Stops at traffic lights don't drag the average down, as on most bike computers.
 - **Max speed** ignores implausible jumps: a new max only counts once two consecutive speed readings agree within 5 km/h, so one bad sample can't set a 90 km/h record.
 - **Charge used (Ah)** = motor current integrated over time (amp-hours drawn from the battery, as the controller reports it). The current is sampled every 600 ms, so it's a good estimate rather than a lab measurement; it doesn't include the display's own small draw.
-- All three stats reset together with their trip (menu reset, battery-charge reset, power-on).
+- All three stats reset together with their trip (M on the Trips screen, battery-charge reset, power-on).
 - The **odometer** keeps an **all-time max speed** (same plausibility rule) and shows it under the total. No average and no Ah.
 
 All distances are counted by the display from wheel RPM × 2165 mm, using the same
@@ -203,7 +219,7 @@ The UI should feel alive, not just redraw. Swang Stodva's renderer already runs 
 |---|---|---|
 | **Boot** | Power-on, before the riding screen (or the PIN screen if locked) | 1. The **sparkles** icon from Swang Stodva (`assets/sparkles.xbm`) is shown centered, **64 px tall** (full screen height). It's already 64×64, so no crop or scale is needed; if the asset changes, crop or scale it to 64 px tall.<br>2. The icon clears, then two rows, a big **`SWET102`** over the version in smaller text (**`v0.1.0`**), slide in from the right, stay still for ~1.2 s so they can be read, and slide out to the left. The version comes from the build, not hardcoded.<br>3. Then the riding screen (or the PIN screen). If the motor link isn't up by then, the "--" error screen (§8) says so; it waits for the animation to end instead of interrupting it. Any button skips the animation (that press does nothing else). |
 | **Page switch** | M short, PWR short (jump to PAS) | ~150 ms horizontal slide inside the white tile: the old glyph slides out to the left and the new one comes in from the right (the other way round for PWR back to PAS). The tile itself stays put. |
-| **Info-pane switch** | M double-click | ~200 ms vertical slide: the old view slides up and out, the new view comes up from the bottom. Column 1 and the battery don't move. |
+| **Trips switch** | LEFT/RIGHT on Menu → Trips (§5) | ~150 ms horizontal slide across the screen: RIGHT pushes the old view out to the left and the new one comes in from the right; LEFT mirrors it. The side arrows stay put. |
 | **PAS change** | LEFT/RIGHT on the PAS page | The number slides sideways like the pages (~100 ms): a higher level comes in from the right, a lower one from the left. |
 | **Special thanks** | Opening the screen, LEFT/RIGHT on it (§5) | The boot's slides, one name at a time: the first name slides in from the right on opening; a step slides the old name out to the left, then the new one in from the right (400 ms each, the boot's ease-in / ease-out). LEFT mirrors it. |
 
@@ -212,13 +228,13 @@ Rules:
 - **Animations never block input.** A button press during an animation snaps it
   to its end state at once and handles the press. Fast PAS taps or page flips
   must not queue up behind animations.
-- **Data stays live.** Speed and the other values keep updating during a pane
+- **Data stays live.** Speed and the other values keep updating during a
   slide; the animation moves live content, not a frozen snapshot.
 - Durations are compile-time constants, tuned in the emulator. Easing is a
   simple ease-out (fast start, soft stop), done in integer math.
 - The emulator's scripted tests run on a fixed simulated clock, so mid-animation
   frames can be asserted exactly (§10).
-- Out of scope for now: animations for the menu (apart from Special thanks), error screen and lock. The
+- Out of scope for now: animations for the menu (apart from Trips and Special thanks), error screen and lock. The
   lock already has its padlock flash (§4).
 
 ### 3.5 Lights
@@ -269,8 +285,7 @@ The time keeps running from the last sync, the same clock AUTO lights use.
 | RIGHT short | Current page's "plus/right" action |
 | RIGHT hold (Player page) | Next track |
 | RIGHT double-click (Player page) | Play / pause |
-| M short | Next page |
-| M double-click (within 350 ms) | Next info-pane view |
+| M short | Next page (instant: M has no double-click) |
 | M hold (1 s) | Open menu |
 | PWR hold | Power on / off (works everywhere, including the menu) |
 | PWR double-click (within 350 ms) | **Lock**: flash a padlock for ~0.5 s, set `locked = 1`, save, power off (see §6) |
@@ -278,12 +293,12 @@ The time keeps running from the last sync, the same clock AUTO lights use.
 
 Menu navigation: see §5.
 
-An M short press only takes effect after the 350 ms double-click window closes,
-so page switching lags by ~350 ms. That's accepted in exchange for being
-forgiving with gloves. The timings are constants and can be tuned in the emulator.
+M has no double-click, so an M short press switches the page on release: quick
+taps flip PAS → Player → Gate without waiting. (Until 2026-11 an M double-click
+cycled the info pane, and every M press waited out the 350 ms window.)
 
-The same rule applies to RIGHT on the Player page only: volume + waits for the
-double-click window to close. On every other page RIGHT acts immediately, so PAS
+A button with a double-click does wait: RIGHT on the Player page only, where
+volume + waits for the 350 ms double-click window to close. On every other page RIGHT acts immediately, so PAS
 changes stay instant. Gesture detection is per page: a page declares which
 gestures it uses, and a button with no double-click handler fires right away.
 
@@ -304,7 +319,7 @@ normally (assist and speed limit don't change; the lights follow their mode).
 │ ‹                 ╭───╮                › │
 │                   │ ▣ │   (big icon)     │
 │                   ╰───╯                  │
-│                RESET TRIP                │
+│                  TRIPS                   │
 │                  ● ○ ○ ○ ○               │  ← position dots
 └──────────────────────────────────────────┘
 ```
@@ -320,8 +335,10 @@ normally (assist and speed limit don't change; the lights follow their mode).
 
 - **No timeout.** The menu stays open until you exit it, even while riding.
 - It opens on the first item every time; the last position isn't remembered.
+- **Speed font**: the font's name between `‹ ›` at the top and a speed (`27`) in it at full size below. It opens on the font in use; LEFT/RIGHT step (wrapping), M sets it (saved) and returns to the item, PWR (esc) returns without a change.
 - **Choice screens** (Lights): the choices side by side, the highlighted one inverted. It opens on the current one; LEFT/RIGHT move (wrapping), M sets it and returns to the item, PWR (esc) returns without a change.
 - **Detail screens** (BLE status, diagnostics, firmware version): PWR (esc) returns to the item. Inside diagnostics, LEFT/RIGHT page through the values when there's more than one screen of them.
+- **Trips**: one trip view at a time (RIDE → TRIP → BAT → ODO, §3.2), the distance large with its stats under it, `‹ ›` at the sides. LEFT/RIGHT step through them (wrapping, with a sideways slide), M asks "Reset trip?" (M = yes, PWR = cancel) from any view; after a yes it shows the zeroed TRIP. PWR (esc) returns to the item. It opens on RIDE every time.
 - **Special thanks**: one name at a time, centred, large; LEFT/RIGHT step through the names (wrapping), M does nothing, PWR (esc) returns to the item. It opens on the first name every time.
 
 ### Items (in ring order)
@@ -329,11 +346,13 @@ normally (assist and speed limit don't change; the lights follow their mode).
 | # | Item | Icon | Function | Confirm |
 |---|---|---|---|---|
 | 1 | **Lights** | light bulb | Choice screen: **OFF / ON / AUTO** (§3.5). The label shows the mode in use (`Lights: AUTO`); the screen also shows the phone's time and when AUTO switches. | — (M sets, PWR cancels) |
-| 2 | **Reset trip** | circular arrow | Zeroes the manual trip counter. Battery trip and ride counters reset themselves. | **Yes**: "Reset trip?" M = yes, PWR = cancel. After a reset, a short "done" toast returns to the item. |
-| 3 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
-| 4 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count, and the battery sense ADC (raw counts and volts through the 300k/16k divider, unfiltered). | — |
-| 5 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
-| 6 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
+| 2 | **Trips** | flag | RIDE / TRIP / BAT / ODO (§3.2), LEFT/RIGHT to step. M zeroes the manual trip counter; battery trip and ride counters reset themselves. | **Yes** for the reset: "Reset trip?" M = yes, PWR = cancel |
+| 3 | **Power** | lightning bolt | Detail screen: the wattmeter, live watts large (§3.2). | — |
+| 4 | **Speed font** | 7-segment "8" | Pick the speed's font (§3.2), previewed at full size. | — (M sets, PWR cancels) |
+| 5 | **BLE status** | Bluetooth rune | Detail screen: phone connected or not, whether commands are subscribed, the display's BLE address (for the app's first-run setup). | — |
+| 6 | **Motor diagnostics** | wrench | Detail screen: raw protocol values, per-opcode reply timeouts, UART error count, and the battery sense ADC (raw counts and volts through the 300k/16k divider, unfiltered). | — |
+| 7 | **Firmware version** | "i" | Detail screen: version, git hash, build date. | — |
+| 8 | **♥ Special thanks** (last) | heart | The people who helped: `@entropia_pl`, `@yahor_k`, `@veganbunt`, one at a time, exactly as written (lowercase, `@`, `_`), in W95FA at 2× (the largest size at which the longest name fits the 128 px width), centred, a small heart above and position dots below. Names change with the boot slides (§3.4). | — |
 
 Not in the menu, on purpose: **Lock** (it's PWR double-click, §4) and **firmware update** (entered by hand in the bootloader, §9). PINs, wheel size, speed limits and motor type are compile-time
 constants. Brightness follows the light state automatically. The speed-limit encoding test (§6) is done by reflashing, not with a menu item.
@@ -658,3 +677,6 @@ Moved to the technical design: the BLE byte layout (telemetry struct, command op
 | 2026-10-12 | Lights page removed (ring PAS → Player → Gate). Lights are a menu item, first in the ring, with OFF / ON / AUTO (choice screen: L/R pick, M set, PWR cancel); RAM only, OFF at power-on. AUTO = on from sunset − 20 min until sunrise, from the phone's time sync (local time + today's sunset/sunrise, on connect and every 10 min); off without a time. The first sync after power-on switches to AUTO unless the rider has picked a mode; a pick always wins. Small bulb on the ride screen while the lights are on |
 | 2026-10-17 | No firmware-triggered DFU: the menu item (Update / Reboot to DFU) and the phone's DFU request are gone, since none of the ways in worked for the owner. Updates are entered by hand (display off, M + PWR ~8 s → `SW102_DFU`) and sent from the app's OTA tab, which compares the zip's version with the build number the display reports over BLE |
 | 2026-10-17 | Auto power-off after 10 min idle (was 5); battery trip resets on a +20 % rise (was +10 %), so a partial top-up doesn't count as a charge |
+| 2026-11-23 | M double-click on the ride screen dropped, so M clicks switch pages at once; the info pane shows the speed only. RIDE / TRIP / BAT / ODO moved to a **Trips** menu item (LEFT/RIGHT step, M resets the trip with the usual confirm) and the wattmeter to a **Power** menu item; the "Reset trip" item is gone |
+| 2026-11-23 | Speed font: Karma Suture (CC0) at 2×, 36 px, replacing 04B_30 for the speed (04B_30 stays for distances and watts) |
+| 2026-11-23 | Speed font selectable: Menu → Speed font (after Power) with Karma (default), Digital-7, Nexa Rust, Blox, Glamour Girl, Neon (Monoton), Plasma Drip and 04B_30, previewed at full size, saved. Pricedown, Mexcellent and Venus Rising left out: their licence (Typodermic Desktop EULA) forbids use in firmware |

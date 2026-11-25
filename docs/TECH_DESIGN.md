@@ -300,14 +300,14 @@ struct Ui { stack: heapless::Vec<Screen, 4>, popup: Option<Popup>, … }
 |---|---|---|
 | Clock | 0, 0, 26, 16 | HH:MM, `W95_CLOCK` (W95FA ×1, 9 px), centred; only while connected and the time is known (`Model::clock_min`) |
 | Tile | 0, 16, 26, 48 | White rounded rect (r = 4), black glyph centered |
-| Pane | 28, 0, 86, 64 | One of 6 views; label + value |
+| Pane | 28, 0, 83, 64 | Speed in `KARMA` (Karma Suture ×2, 36 px) over `km/h` |
 | Battery | 116, 0, 12, 64 | Icon (fill = SoC), XOR bolt in sport, `%` below |
 
 These pixel splits are a starting point to tune in the emulator.
 
 ```rust
 #[derive(Clone, Copy)] enum Page { Pas, Player, Gate }      // ring = declaration order
-#[derive(Clone, Copy)] enum View { Speed, Power, Trip, BattTrip, Ride, Odo }
+#[derive(Clone, Copy)] enum View { Ride, Trip, BattTrip, Odo }  // ui/trips.rs: Menu → Trips
 
 impl Page {
     fn gestures(self) -> GestureCfg { … }   // Player: RIGHT double + LEFT/RIGHT hold
@@ -346,11 +346,11 @@ impl Tween {
 }
 ```
 
-- **Page and pane slides:** render the old and new content with an offset,
+- **Page and trips slides:** render the old and new content with an offset,
   clipped to the widget rect. Both are rendered **live** each frame.
 - **Input during an animation:** a new button press (`Down`) first calls `snap()` on
   every active tween, then gets handled. Nothing queues. Only the press: the release
-  of the double-click that started a pane slide must not cut it short.
+  of the click that started a slide must not cut it short.
 - **Boot** (`ui/boot.rs`): the sparkles show for 600 ms, then two rows of `TEXT`,
   magnified: `SWET102` by the largest scale that fits (2× today), `v<version>` one
   step smaller, and smaller still if it must, so the `v` always fits (1× today;
@@ -366,12 +366,13 @@ impl Tween {
   snaps it like the ride slides, so fast steps don't queue.
 - **Slides** (`ui/ride.rs`): all horizontal inside the tile: page 150 ms (in from
   the right on M, from the left on PWR back to PAS), PAS 100 ms (a higher level in
-  from the right, a lower one from the left); info pane 200 ms, vertical (the old
-  view leaves at the top, the new one comes up from the bottom). No clip
+  from the right, a lower one from the left). No clip
   rectangles: the tile is drawn first and
   its glyphs are black (Clear), so one sliding past the tile edge lands off screen
-  or on black and the pane drawn after it covers the spill; a pane sliding past the
-  top or bottom is clipped by the screen.
+  or on black and the pane drawn after it covers the spill.
+- **Trips** (`ui/trips.rs`): LEFT/RIGHT slide the views sideways across the whole
+  screen, 150 ms, clipped by the screen edges; the `‹ ›` arrows are drawn last on
+  a cleared patch, so the views pass under them.
 
 ### 5.5 Event routing
 
@@ -384,8 +385,8 @@ goes through one fixed chain, and the first handler that matches consumes it:
 | 1 | **Global** | PWR `Hold` → power off (any screen); PWR `Double` → lock + off (ride screen only) |
 | 2 | **Animations** | nothing; a new press (`Down`) first calls `snap()` on running tweens (§5.4) |
 | 3 | **Popup**, if shown | everything: M dismisses an error, any button dismisses the battery-trip message |
-| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Lights`: L/R choice, M set, PWR cancel · `Thanks`: L/R name (wrapping), PWR back · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
-| 5 | **Ride → current page** | the ride screen keeps M (page ring, pane ring, menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Player, Gate) |
+| 4 | **Top of stack** | `Boot`: any button skips · `Pin`: L/R digit, M next, PWR backspace · `Menu`: L/R item, M enter, PWR esc · `Lights`: L/R choice, M set, PWR cancel · `Thanks`: L/R name (wrapping), PWR back · `Trips`: L/R view (wrapping), M pushes `Confirm(ResetTrip)`, PWR back · `Detail`: PWR back, L/R page · `Confirm`: M yes, PWR cancel |
+| 5 | **Ride → current page** | the ride screen keeps M (click: page ring, hold: menu) and PWR click (go to PAS); **LEFT/RIGHT go to `page.on_event()`** (PAS, Player, Gate) |
 
 ```rust
 fn dispatch(&mut self, ev: Event, now: u32) {
@@ -398,8 +399,9 @@ fn dispatch(&mut self, ev: Event, now: u32) {
 
 **Navigation:**
 - M hold pushes `Menu`. M on an item pushes `Detail` or `Confirm`. PWR pops one
-  level. Popping `Menu` returns to `Ride` with its page and view unchanged,
-  because they live inside `Ride`.
+  level. Popping `Menu` returns to `Ride` with its page unchanged, because it
+  lives inside `Ride`. A confirmed trip reset pops back to `Trips`, which then
+  shows the zeroed TRIP.
 - At boot: `[Boot]` → `[Ride]` or `[Pin]`. A correct PIN replaces `Pin` with `Ride`.
 - Popups live in their own slot, not on the stack, so they can appear over any screen.
 
@@ -407,7 +409,7 @@ fn dispatch(&mut self, ev: Event, now: u32) {
 button has double-click or hold before it can classify a press. `App::gesture_cfg()`
 asks the same chain:
 - a popup, menu, detail, confirm, PIN or boot screen gives `SIMPLE` (instant clicks only)
-- the ride screen gives M and PWR double + hold, plus LEFT/RIGHT from `page.gesture_cfg()`, e.g. RIGHT double only on Player
+- the ride screen gives M hold (no double, so its click is instant), PWR double + hold, plus LEFT/RIGHT from `page.gesture_cfg()`, e.g. RIGHT double only on Player
 
 The config is **latched when a button goes down** and kept until that press
 finishes. If the screen changes mid-gesture (M hold opens the menu while M is still
@@ -595,7 +597,9 @@ The record is encoded **explicitly**, little-endian, into a `[u8; 48]`. There's 
 | 2 | speed_limit | u8, km/h (25 = city, > 25 = sport) |
 | 3 | locked | u8 |
 | 4 | soc_min | u8 |
-| 5..8 | reserved | — |
+| 5 | soc_min_valid | u8 |
+| 6 | speed_font | u8, `ui::ride::SpeedFont` (0 = Karma; unknown values read as 0) |
+| 7 | reserved | — |
 | 8 | odo_m | u32 |
 | 12 | trip_m | u32 |
 | 16 | trip_moving_s | u32 |
@@ -902,12 +906,11 @@ is powered off and started with a long PWR press (soft power latch).
 
 ```rust
 #[test]
-fn m_double_click_switches_pane_without_switching_page() {
-    let mut s = Sim::new().motor_speed_kmh(27).boot_to_ride();
-    s.double_click(Btn::M);
-    s.run_ms(300);
-    assert_eq!(s.app().page(), Page::Pas);
-    s.assert_frame("pane_power");            // golden PNG in crates/swet-sim/golden/
+fn speed_view_shows_motor_speed() {
+    let mut s = Sim::new();
+    s.motor().set_speed_kmh(27);
+    s.boot_to_ride();
+    s.assert_screen("m1_speed_27");          // golden PNG in crates/swet-sim/golden/
 }
 ```
 
@@ -1150,3 +1153,5 @@ Most of these are answered by a **probe build of Swang Stodva**, specified in
 | 2026-10-18 | Pack voltage above the battery icon (PRODUCT §3.3): whole volts in `W95_CLOCK` (`54` is 11 px, fits the 12 px column; `54.2` would not), centred at the clock's height in the top `TILE.1` (16) px. The icon body moves to `TILE.1 + 2`, 30 px tall (bottom edge unchanged), terminal on top. Replaces the Power view's top-right volts |
 | 2026-10-18 | Battery column fonts swapped: % in `W95_CLOCK`, centred in the 16 px under the icon (`100`, 15 px, clamped to end at x 127, 3 px into the gap), volts in 3×5 at the top. `--` without SoC stays 3×5 (W95_CLOCK has no `-`) |
 | 2026-10-18 | Battery column 15 px (`BAT_X` 113, `BAT_W`; the pane shrinks to 83 px) so the volts fit with a decimal (`54.9`, 3×5, 15 px) and `100` in W95_CLOCK (15 px) without clamping. Icon 13 px wide (1 px margins), 5 px terminal, bolt centred |
+| 2026-11-23 | Ride screen: M is hold-only (no `Double`), so an M click switches the page on release; the pane shows the speed only (`RideScreen::view` and the pane slide are gone). `ui/trips.rs`: `Screen::Trips` (RIDE / TRIP / BAT / ODO, `TripsScreen` with a 150 ms sideways `Tween`, opens at RIDE; M pushes `Confirm(ResetTrip)`, a yes pops back and shows TRIP) and `Screen::Power` (watts in `SPEED`). Menu items `Trips` and `Power` replace `ResetTrip`; the menu's "Done" toast (`MENU_DONE_MS`) is gone. Speed font `KARMA`: Karma Suture (CC0, `assets/fonts/`), rasterised by `swet-assets` on its 49.2-unit pixel grid, ×2 |
+| 2026-11-23 | Speed fonts: `ui::ride::SpeedFont` (Karma, Digital-7, Nexa Rust, Blox, Glamour Girl, Neon = Monoton, Plasma Drip, 04B_30), picked on Menu → Speed font (`Screen::SpeedFont`, like Lights: L/R preview, M set, PWR cancel), saved in record byte 6 (reserved until now, so no layout bump). `swet-assets` rasterises ordinary outline fonts too (`OutlineFontSrc`: tallest glyph = `height` px but no digit wider than `MAX_DIGIT_W` (40), ≥ 50 % coverage; `mono` keeps equal cells, ink right). Their files live in the untracked `assets/fonts/local/` (licences allow the use but not sharing the files); only the rasterised digits are committed. The speed is centred in the rows above `km/h`. Pricedown, Mexcellent and Venus Rising were left out: the Typodermic Desktop EULA forbids firmware and hardware embedding and glyph libraries made from them |

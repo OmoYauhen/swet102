@@ -22,6 +22,9 @@ pub struct Record {
     /// `soc_min` has been set from a real reading (byte 5, reserved before M4,
     /// so older records read as "not yet").
     pub soc_min_valid: bool,
+    /// `ui::ride::SpeedFont` (byte 6, reserved before, so older records
+    /// read as the default font).
+    pub speed_font: u8,
     pub odo_m: u32,
     pub trip_m: u32,
     pub trip_moving_s: u32,
@@ -42,6 +45,7 @@ impl Record {
             locked: false,
             soc_min: 0,
             soc_min_valid: false,
+            speed_font: 0,
             odo_m: 0,
             trip_m: 0,
             trip_moving_s: 0,
@@ -63,7 +67,8 @@ impl Record {
         b[3] = u8::from(self.locked);
         b[4] = self.soc_min;
         b[5] = u8::from(self.soc_min_valid);
-        // 6..8 reserved
+        b[6] = self.speed_font;
+        // 7 reserved
         put32(&mut b, 8, self.odo_m);
         put32(&mut b, 12, self.trip_m);
         put32(&mut b, 16, self.trip_moving_s);
@@ -94,6 +99,7 @@ impl Record {
             locked: b[3] != 0,
             soc_min: b[4].min(100),
             soc_min_valid: b[5] == 1,
+            speed_font: crate::ui::ride::SpeedFont::from_u8(b[6]) as u8,
             odo_m: get32(b, 8),
             trip_m: get32(b, 12),
             trip_moving_s: get32(b, 16),
@@ -241,6 +247,7 @@ mod tests {
             locked: true,
             soc_min: 41,
             soc_min_valid: true,
+            speed_font: 5,
             odo_m: 1_234_567,
             trip_m: 42_700,
             trip_moving_s: 7_120,

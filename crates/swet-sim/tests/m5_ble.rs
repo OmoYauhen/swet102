@@ -16,15 +16,15 @@ fn riding(kmh: u32) -> Sim {
     s
 }
 
-/// M short until `page` is showing (each click waits out the double-click
-/// window and the 150 ms page slide).
+/// M short until `page` is showing (each click waits out the 150 ms page
+/// slide).
 fn goto(s: &mut Sim, page: Page) {
     for _ in 0..3 {
         if s.app().page() == page {
             return;
         }
         s.click(Buttons::M);
-        s.run_ms(config::DBL_MS + 200);
+        s.run_ms(200);
     }
     panic!("page {page:?} not reached");
 }
@@ -242,8 +242,9 @@ fn trip_reset_sends_the_trip_record_at_once() {
 
     s.hold(Buttons::M, 1200);
     s.click(Buttons::RIGHT);
-    assert_eq!(s.app().menu_item(), Item::ResetTrip);
-    s.click(Buttons::M); // open
+    assert_eq!(s.app().menu_item(), Item::Trips);
+    s.click(Buttons::M); // open Trips
+    s.click(Buttons::M); // reset?
     s.click(Buttons::M); // yes
     s.tick();
     let trips = s.notified(BleChannel::Trips);
@@ -272,8 +273,9 @@ fn ble_screen_shows_the_phone() {
     let mut s = riding(0);
     s.phone_connect();
     s.hold(Buttons::M, 1200);
-    s.click(Buttons::RIGHT);
-    s.click(Buttons::RIGHT);
+    for _ in 0..4 {
+        s.click(Buttons::RIGHT);
+    }
     assert_eq!(s.app().menu_item(), Item::Ble);
     s.click(Buttons::M);
     assert_eq!(s.app().screen(), Screen::Ble);

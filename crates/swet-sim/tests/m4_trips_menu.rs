@@ -4,7 +4,7 @@ use swet_heart::store::Record;
 use swet_heart::ui::Screen;
 use swet_heart::ui::menu::Item;
 use swet_heart::ui::popup::{Fault, Popup};
-use swet_heart::ui::ride::View;
+use swet_heart::ui::trips::View;
 use swet_heart::{Buttons, config};
 use swet_sim::Sim;
 
@@ -22,17 +22,6 @@ fn ride(kmh: u32, amps: u8, secs: u32) -> Sim {
     s
 }
 
-fn show_view(s: &mut Sim, v: View) {
-    for _ in 0..6 {
-        if s.app().view() == v {
-            return;
-        }
-        s.double_click(Buttons::M);
-        s.run_ms(250); // let the pane push finish
-    }
-    panic!("view {v:?} not reached");
-}
-
 fn open_menu_at(s: &mut Sim, item: Item) {
     s.hold(Buttons::M, 1200);
     assert_eq!(s.app().screen(), Screen::Menu);
@@ -43,6 +32,23 @@ fn open_menu_at(s: &mut Sim, item: Item) {
         s.click(Buttons::RIGHT);
     }
     panic!("menu item {item:?} not reached");
+}
+
+/// Menu → Trips, then RIGHT until `v` is showing.
+fn show_view(s: &mut Sim, v: View) {
+    if s.app().screen() != Screen::Trips {
+        open_menu_at(s, Item::Trips);
+        s.click(Buttons::M);
+        assert_eq!(s.app().screen(), Screen::Trips);
+    }
+    for _ in 0..View::RING.len() {
+        if s.app().trips_view() == v {
+            s.run_ms(200); // let the slide finish
+            return;
+        }
+        s.click(Buttons::RIGHT);
+    }
+    panic!("view {v:?} not reached");
 }
 
 #[test]
@@ -89,23 +95,41 @@ fn distances_are_saved_after_a_stop_and_survive_a_power_cycle() {
 }
 
 #[test]
-fn reset_trip_from_the_menu_with_confirmation() {
+fn trips_screen_steps_through_ride_trip_bat_odo_and_wraps() {
+    let mut s = ride(36, 0, 5);
+    open_menu_at(&mut s, Item::Trips);
+    s.assert_screen("m4_menu_trips");
+    s.click(Buttons::M);
+    assert_eq!(s.app().trips_view(), View::Ride, "opens at RIDE");
+    for v in [View::Trip, View::BattTrip, View::Odo, View::Ride] {
+        s.click(Buttons::RIGHT);
+        assert_eq!(s.app().trips_view(), v);
+    }
+    s.click(Buttons::LEFT);
+    assert_eq!(s.app().trips_view(), View::Odo);
+    s.click(Buttons::PWR);
+    assert_eq!(s.app().screen(), Screen::Menu);
+}
+
+#[test]
+fn m_on_the_trips_screen_resets_the_trip_with_confirmation() {
     let mut s = ride(36, 0, 30);
     s.motor().set_speed_kmh(0);
     let odo = s.app().rides().odo_m;
-    open_menu_at(&mut s, Item::ResetTrip);
-    s.assert_screen("m4_menu_reset");
+    show_view(&mut s, View::Odo);
     s.click(Buttons::M);
     assert!(matches!(s.app().screen(), Screen::Confirm(_)));
     s.assert_screen("m4_confirm_reset");
 
     s.click(Buttons::PWR); // cancel
-    assert_eq!(s.app().screen(), Screen::Menu);
+    assert_eq!(s.app().screen(), Screen::Trips);
+    assert_eq!(s.app().trips_view(), View::Odo);
     assert!(s.app().rides().trip.m > 0);
 
     s.click(Buttons::M);
     s.click(Buttons::M); // yes
-    assert_eq!(s.app().screen(), Screen::Menu);
+    assert_eq!(s.app().screen(), Screen::Trips);
+    assert_eq!(s.app().trips_view(), View::Trip, "shows the zeroed trip");
     let r = s.app().rides();
     assert_eq!(r.trip.m, 0);
     assert_eq!(
@@ -113,7 +137,7 @@ fn reset_trip_from_the_menu_with_confirmation() {
         (odo, odo),
         "only the manual trip resets"
     );
-    s.assert_screen("m4_menu_done");
+    s.assert_screen("m4_trip_reset");
     s.run_ms(200);
     assert_eq!(stored(&s).trip_m, 0, "saved at once");
 }
@@ -127,10 +151,9 @@ fn menu_wraps_and_pwr_backs_out() {
     assert_eq!(s.app().menu_item(), Item::Thanks);
     s.click(Buttons::LEFT);
     assert_eq!(s.app().menu_item(), Item::Firmware);
-    s.click(Buttons::RIGHT);
-    s.click(Buttons::RIGHT);
-    s.click(Buttons::RIGHT);
-    s.click(Buttons::RIGHT);
+    for _ in 0..6 {
+        s.click(Buttons::RIGHT);
+    }
     assert_eq!(s.app().menu_item(), Item::Ble);
     s.click(Buttons::PWR);
     assert_eq!(s.app().screen(), Screen::Ride);

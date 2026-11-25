@@ -542,8 +542,8 @@ fn report_gif(r: record::Recorder) {
     }
 }
 
-/// Headless: a scripted tour (boot, PAS, every page, the Firmware screen from
-/// the menu, pane slides) as a GIF.
+/// Headless: a scripted tour (boot, PAS, every page, a speed sweep for the
+/// speed font, the Trips views and the Firmware screen from the menu) as a GIF.
 fn demo_gif(path: &str) {
     let mut sim = Sim::booting(None);
     sim.phone_connect();
@@ -570,22 +570,34 @@ fn demo_gif(path: &str) {
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Player
     tap(&mut sim, &mut rec, Buttons::M, 1000); // Gate
     tap(&mut sim, &mut rec, Buttons::PWR, 1000); // back to PAS
-    // menu → Firmware (version, build, QR code), back to the ride screen
+    // speed up to 36, brake to a stop, pull away again: every digit shows
+    sim.motor().current_x2 = 30;
+    speed_to(&mut sim, &mut rec, 23, 36, 1);
+    sim.motor().current_x2 = 0;
+    speed_to(&mut sim, &mut rec, 36, 0, 2);
+    run(&mut sim, &mut rec, 800);
+    sim.motor().current_x2 = 24;
+    speed_to(&mut sim, &mut rec, 0, 19, 1);
+    sim.motor().current_x2 = 16;
+    run(&mut sim, &mut rec, 800);
+    // menu → Trips (the views slide), then Firmware (version, build, QR code),
+    // back to the ride screen
     sim.press(Buttons::M);
     run(&mut sim, &mut rec, 1200);
     sim.release(Buttons::M);
     run(&mut sim, &mut rec, 600);
+    tap(&mut sim, &mut rec, Buttons::RIGHT, 400); // Lights → Trips
+    tap(&mut sim, &mut rec, Buttons::M, 1200); // open Trips: RIDE
+    for _ in 0..3 {
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 1000); // TRIP, BAT, ODO: they slide
+    }
+    tap(&mut sim, &mut rec, Buttons::PWR, 600); // back to the menu
     for _ in 0..4 {
-        tap(&mut sim, &mut rec, Buttons::RIGHT, 400); // Lights → … → Firmware
+        tap(&mut sim, &mut rec, Buttons::RIGHT, 400); // Trips → … → Firmware
     }
     tap(&mut sim, &mut rec, Buttons::M, 2500); // open Firmware
     tap(&mut sim, &mut rec, Buttons::PWR, 600); // back to the menu
     tap(&mut sim, &mut rec, Buttons::PWR, 1000); // out of the menu
-    for _ in 0..2 {
-        // M double-click: the next info view slides up
-        tap(&mut sim, &mut rec, Buttons::M, 60);
-        tap(&mut sim, &mut rec, Buttons::M, 1200);
-    }
     match rec.finish() {
         Ok(n) => eprintln!("saved {path} ({n} frames)"),
         Err(e) => {
@@ -641,6 +653,20 @@ fn run(sim: &mut Sim, rec: &mut record::Recorder, ms: u32) {
             eprintln!("swet-emu: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// Ride from `from` to `to` km/h in steps of `step`, one step per speed
+/// reading (the display asks for the speed every other 100 ms slot).
+fn speed_to(sim: &mut Sim, rec: &mut record::Recorder, from: u32, to: u32, step: usize) {
+    let kmh: Vec<u32> = if from <= to {
+        (from..=to).step_by(step).collect()
+    } else {
+        (to..=from).rev().step_by(step).collect()
+    };
+    for v in kmh {
+        sim.motor().set_speed_kmh(v);
+        run(sim, rec, 200);
     }
 }
 

@@ -28,8 +28,9 @@ use ui::diag::DiagData;
 use ui::menu::{BleInfo, Confirm, Item, Menu};
 use ui::pin::PinEntry;
 use ui::popup::{Fault, Popup, Popups};
-use ui::ride::{Page, RideScreen, View};
+use ui::ride::{Page, RideScreen, SpeedFont};
 use ui::thanks::Thanks;
+use ui::trips::{TripsScreen, View};
 use ui::{Model, Overlay, Scene, Screen, Stack};
 
 /// Rider-controlled state. `pas`, `speed_limit` and `locked` are persisted.
@@ -44,6 +45,7 @@ pub struct State {
     pub speed_limit: u8,
     /// Ask for a PIN at the next power-on.
     pub locked: bool,
+    pub speed_font: SpeedFont,
 }
 
 impl State {
@@ -79,6 +81,7 @@ pub struct App<H: Hal> {
     pin: PinEntry,
     menu: Menu,
     thanks: Thanks,
+    trips: TripsScreen,
     /// Lights mode and the phone's time of day (RAM only, PRODUCT §3.5).
     lights: Lights,
     rides: Rides,
@@ -89,8 +92,8 @@ pub struct App<H: Hal> {
     /// Last loaded/saved record; trip fields ride along unchanged until M4.
     rec: Record,
     saver: Saver,
-    /// (pas, speed_limit, locked) as of the last save, to spot changes.
-    saved: (u8, u8, bool),
+    /// (pas, speed_limit, locked, speed_font) as of the last save, to spot changes.
+    saved: (u8, u8, bool, SpeedFont),
     power: Power,
     last_activity: u32,
     last_buttons: Buttons,
@@ -123,6 +126,7 @@ impl<H: Hal> App<H> {
             pin: PinEntry::new(),
             menu: Menu::new(),
             thanks: Thanks::new(),
+            trips: TripsScreen::new(),
             lights: Lights::new(),
             rides: Rides::new(),
             seen_speed: 0,
@@ -133,6 +137,7 @@ impl<H: Hal> App<H> {
                 lights: false,
                 speed_limit: 0,
                 locked: false,
+                speed_font: SpeedFont::Karma,
             },
             rec: Record {
                 pas: 0,
@@ -140,6 +145,7 @@ impl<H: Hal> App<H> {
                 locked: false,
                 soc_min: 0,
                 soc_min_valid: false,
+                speed_font: 0,
                 odo_m: 0,
                 trip_m: 0,
                 trip_moving_s: 0,
@@ -152,7 +158,7 @@ impl<H: Hal> App<H> {
                 odo_max_x10: 0,
             },
             saver: Saver::new(),
-            saved: (0, 0, false),
+            saved: (0, 0, false, SpeedFont::Karma),
             power: Power::On,
             last_activity: 0,
             last_buttons: Buttons(0),
@@ -178,6 +184,7 @@ impl<H: Hal> App<H> {
         self.state.pas = self.rec.pas;
         self.state.speed_limit = self.rec.speed_limit;
         self.state.locked = self.rec.locked;
+        self.state.speed_font = SpeedFont::from_u8(self.rec.speed_font);
         self.rides.load(&self.rec);
         self.saved = self.settings();
         self.boot_then = if self.state.locked {
@@ -271,6 +278,7 @@ impl<H: Hal> App<H> {
             menu: &self.menu,
             lights: &self.lights,
             thanks: &self.thanks,
+            trips: &self.trips,
             ble: self.ble_info(),
             model: &model,
             diag: &diag,
@@ -344,8 +352,9 @@ impl<H: Hal> App<H> {
         }
     }
 
-    fn settings(&self) -> (u8, u8, bool) {
-        (self.state.pas, self.state.speed_limit, self.state.locked)
+    fn settings(&self) -> (u8, u8, bool, SpeedFont) {
+        let s = &self.state;
+        (s.pas, s.speed_limit, s.locked, s.speed_font)
     }
 
     fn record(&self) -> Record {
@@ -353,6 +362,7 @@ impl<H: Hal> App<H> {
             pas: self.state.pas,
             speed_limit: self.state.speed_limit,
             locked: self.state.locked,
+            speed_font: self.state.speed_font as u8,
             ..self.rec
         };
         self.rides.store(&mut r);
@@ -465,11 +475,12 @@ impl<H: Hal> App<H> {
             return;
         }
         // Input never waits behind an animation (PRODUCT §3.4): a new press
-        // snaps it to its end. Only the press: the release of the double-click
-        // that started a pane slide must not cut it short.
+        // snaps it to its end. Only the press: the release of the click that
+        // started a slide must not cut it short.
         if ev.g == Down {
             self.ride.snap();
             self.thanks.snap();
+            self.trips.snap();
         }
         match self.popup_shown() {
             Popup::None => {}
@@ -494,7 +505,6 @@ impl<H: Hal> App<H> {
                     let m = self.model();
                     self.ride.next_page(&m, now);
                 }
-                (Btn::M, Double) => self.ride.next_view(now),
                 (Btn::M, Hold) => {
                     self.menu.open();
                     self.stack.push(Screen::Menu);
@@ -515,7 +525,15 @@ impl<H: Hal> App<H> {
                         self.menu.open_lights(self.lights.mode);
                         Screen::Lights
                     }
-                    Item::ResetTrip => Screen::Confirm(Confirm::ResetTrip),
+                    Item::Trips => {
+                        self.trips.open();
+                        Screen::Trips
+                    }
+                    Item::Power => Screen::Power,
+                    Item::SpeedFont => {
+                        self.menu.open_speed_font(self.state.speed_font);
+                        Screen::SpeedFont
+                    }
                     Item::Ble => Screen::Ble,
                     Item::Diagnostics => Screen::Diag,
                     Item::Firmware => Screen::Firmware,
@@ -538,10 +556,31 @@ impl<H: Hal> App<H> {
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
             },
+            // like Lights: LEFT/RIGHT preview the fonts, M sets one (saved), PWR
+            // leaves it as it was
+            Screen::SpeedFont => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => self.menu.font_step(false),
+                (Btn::Right, Click) => self.menu.font_step(true),
+                (Btn::M, Click) => {
+                    self.state.speed_font = self.menu.font_choice();
+                    self.stack.pop();
+                }
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
             // the names: LEFT/RIGHT step (wrapping, each with the boot slides), PWR back
             Screen::Thanks => match (ev.btn, ev.g) {
                 (Btn::Left, Click) => self.thanks.step(false, now),
                 (Btn::Right, Click) => self.thanks.step(true, now),
+                (Btn::Pwr, Click) => self.stack.pop(),
+                _ => {}
+            },
+            // RIDE / TRIP / BAT / ODO: LEFT/RIGHT step (wrapping), M asks to
+            // reset the trip, PWR back
+            Screen::Trips => match (ev.btn, ev.g) {
+                (Btn::Left, Click) => self.trips.step(false, now),
+                (Btn::Right, Click) => self.trips.step(true, now),
+                (Btn::M, Click) => self.stack.push(Screen::Confirm(Confirm::ResetTrip)),
                 (Btn::Pwr, Click) => self.stack.pop(),
                 _ => {}
             },
@@ -553,7 +592,8 @@ impl<H: Hal> App<H> {
                             self.rides.reset_trip();
                             self.blep.trip_changed(TripId::Trip);
                             self.saver.now(now);
-                            self.menu.show_done(now);
+                            // back on the trips screen: the zeroed TRIP is the receipt
+                            self.trips.show(View::Trip);
                         }
                     }
                 }
@@ -566,7 +606,7 @@ impl<H: Hal> App<H> {
                     self.end_boot();
                 }
             }
-            Screen::Diag | Screen::Ble | Screen::Firmware => {
+            Screen::Diag | Screen::Ble | Screen::Firmware | Screen::Power => {
                 if (ev.btn, ev.g) == (Btn::Pwr, Click) {
                     self.stack.pop();
                 }
@@ -675,6 +715,7 @@ impl<H: Hal> App<H> {
             ride: self.rides.ride,
             odo_m: self.rides.odo_m,
             odo_max_x10: self.rides.odo_max_x10,
+            speed_font: self.state.speed_font,
         }
     }
 
@@ -749,9 +790,11 @@ impl<H: Hal> App<H> {
         self.popup_shown()
     }
 
-    /// A page, PAS or info-pane slide (or a Special thanks name) is running.
+    /// A page, PAS or trips slide (or a Special thanks name) is running.
     pub fn animating(&self) -> bool {
-        self.ride.animating(self.now) || self.thanks.animating(self.now)
+        self.ride.animating(self.now)
+            || self.thanks.animating(self.now)
+            || self.trips.animating(self.now)
     }
 
     /// The Special thanks screen's name, index into `ui::thanks::NAMES`.
@@ -763,8 +806,9 @@ impl<H: Hal> App<H> {
         self.ride.page
     }
 
-    pub fn view(&self) -> View {
-        self.ride.view
+    /// The view on Menu → Trips.
+    pub fn trips_view(&self) -> View {
+        self.trips.view
     }
 
     pub fn blep(&self) -> &Blep {
